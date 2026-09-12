@@ -1,0 +1,22 @@
+{
+  "_provenance": {
+    "meridianglobal.com": "Real capture from https://rdap.org/domain/meridianglobal.com on 2026-09-12 (events only).",
+    "northwindfreight.com": "Scenario fixture for the clean control vendor (not exercised: the gate clears it before forensics).",
+    "meridian-global.co": "Scenario fixture. rdap.org has no RDAP server for .co, so this cannot be captured live. Registration is stored relative to now (registeredHoursAgo) so the demo reads '72 hours ago' on any day. Register a lookalike domain you control and run `pnpm capture` to replace it with a real capture."
+  },
+  "domains": {
+    "meridianglobal.com": {
+      "events": [
+        { "eventAction": "registration", "eventDate": "1999-02-27T05:00:00Z" },
+        { "eventAction": "expiration", "eventDate": "2027-02-27T05:00:00Z" },
+        { "eventAction": "last changed", "eventDate": "2026-03-01T03:30:32Z" }
+      ]
+    },
+    "meridian-global.co": {
+      "registeredHoursAgo": 72
+    },
+    "northwindfreight.com": {
+      "events": [{ "eventAction": "registration", "eventDate": "2004-06-11T16:20:00Z" }]
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "_provenance": "Scenario fixture in Tavily /search response shape. Meridian Global Logistics LLC is the fictional demo vendor, so its registry results are authored, not captured; (312) 555-0198 is a reserved fictional 555 number. With TAVILY_API_KEY set, run `pnpm capture` to record real responses for your own scenario. The extraction code (extractFindings) runs identically over this file and live results. The domain query fixture is intentionally empty: adverse-media results are never authored.",
+  "vendors": {
+    "v_meridian": {
+      "entity": {
+        "query": "Meridian Global Logistics LLC headquarters corporate phone",
+        "results": [
+          {
+            "title": "MERIDIAN GLOBAL LOGISTICS LLC :: Illinois (US) :: OpenCorporates",
+            "url": "https://opencorporates.com/companies/us_il/LLC_00418827",
+            "content": "MERIDIAN GLOBAL LOGISTICS LLC. Company Number LLC_00418827. Status Active. Incorporation Date 14 March 2005. Company Type Limited Liability Company. Jurisdiction Illinois (US). Registered Address 233 S Wacker Dr, Suite 4100, Chicago, IL 60606. Principal office telephone (312) 555-0198. Website meridianglobal.com.",
+            "score": 0.94
+          },
+          {
+            "title": "Meridian Global Logistics LLC - Company Profile - Bloomberg",
+            "url": "https://www.bloomberg.com/profile/company/0418827Z:US",
+            "content": "Meridian Global Logistics LLC provides freight forwarding, ocean and air cargo, and customs brokerage services. The company was founded in 2005 and is headquartered in Chicago, Illinois. Address: 233 South Wacker Drive, Chicago, IL 60606. Phone: 312-555-0198. Website: www.meridianglobal.com",
+            "score": 0.91
+          },
+          {
+            "title": "Form D - Meridian Global Logistics LLC - SEC.gov",
+            "url": "https://www.sec.gov/Archives/edgar/data/1418827/000141882719000001/xslFormDX01/primary_doc.xml",
+            "content": "Name of Issuer: Meridian Global Logistics LLC. Jurisdiction of Incorporation/Organization: ILLINOIS. Year of Incorporation: 2005. Principal Place of Business and Contact Information: 233 S WACKER DR STE 4100, CHICAGO, IL, 60606. Phone Number of Issuer: 312.555.0198",
+            "score": 0.83
+          }
+        ]
+      },
+      "domain": {
+        "query": "meridian-global.co whois legitimacy",
+        "results": []
+      }
+    }
+  }
+}
