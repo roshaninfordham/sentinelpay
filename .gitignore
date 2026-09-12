@@ -45,3 +45,8 @@ sentinel.db*
 !.env.example
 .playwright-mcp/
 .column-sandbox.json
+
+# tool-installed agent skills (not part of the app)
+.agents/
+.claude/
+skills-lock.json

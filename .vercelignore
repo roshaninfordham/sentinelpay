@@ -1,0 +1,11 @@
+# Local-only files that must never be uploaded with a CLI deploy
+.env*
+!.env.example
+sentinel.db*
+.column-sandbox.json
+.playwright-mcp
+.agents
+.claude
+skills-lock.json
+.next
+node_modules

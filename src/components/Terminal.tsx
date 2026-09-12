@@ -30,7 +30,7 @@ export function Terminal({ lines }: { lines: TimelineLine[] }) {
         ) : (
           lines.map((l) => (
             <div key={l.id} className="grid grid-cols-[4.5rem_1fr] gap-2">
-              <span className="text-muted/60">{clock(l.ts)}</span>
+              <span className="text-muted/60" suppressHydrationWarning>{clock(l.ts)}</span>
               <span className={`break-words ${TONE[l.kind]}`}>{l.text}</span>
             </div>
           ))

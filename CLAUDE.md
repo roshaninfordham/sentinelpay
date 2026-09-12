@@ -11,7 +11,7 @@ Ship a **working end-to-end interception demo** (PRD §4.1) before anything else
 1. **Contracts are law.** Import types from `src/lib/types.ts` (ARCHITECTURE §3). Never redefine a shared type locally. If a contract needs to change, the orchestrator changes it once, everyone re-syncs.
 2. **Fallback or it didn't ship.** Every external call (`rdap`, `tavily`, ElevenLabs, Column) needs a cached/mock path guarded by an env flag (`DEMO_MODE=cache`). A demo that dies on venue wifi is a lost demo.
 3. **The money decision is deterministic.** Risk `score`/`level` come from `policy.ts` (pure function). An LLM may phrase prose; it may never set the verdict.
-4. **Keep it one repo, one language.** TypeScript + Next.js App Router. No Python service, no extra process. SQLite via `better-sqlite3`.
+4. **Keep it one repo, one language.** TypeScript + Next.js App Router. No Python service, no extra process. SQLite dialect via `@libsql/client` (Turso on Vercel, local file offline).
 5. **Small, verifiable commits.** Each sub-agent leaves its slice runnable and adds a one-line note to the task board below.
 
 ---
@@ -123,6 +123,7 @@ Pick a `requestSourceDomain` you can actually control so RDAP returns a genuinel
 - [x] frontend-agent — dashboard + polling `/api/stream` + terminal + call console + frozen shield
 - [x] voice-agent — ElevenLabs browser agent (token route, client tools, agent.config.md) + scripted fallback on the same tools. Live agent NOT exercised yet (no keys).
 - [x] integration-agent — one-click E2E, `DEMO_MODE=cache`, reset button; verified in browser (~25s click → frozen)
+- [x] deploy — Vercel production (https://sentinelpay-sigma.vercel.app) on Turso; libSQL async data layer; E2E verified on prod (release → forensics → call → FROZEN, chain ok)
 - [x] docs — landing README (problem, tracks, solution, sourced + measured numbers, mermaid architecture), docs/ARCHITECTURE.md, MIT LICENSE
 - [ ] demo-agent — record video, rehearse; replace authored Tavily fixture with a real capture (`pnpm capture --write-tavily`)
 - [x] (stretch) data-agent — Column sandbox rail (`providers/column*.ts`, `pnpm column:setup`, 3 tests). Not yet run against a real sandbox key.

@@ -11,6 +11,8 @@ payment. Every step is written to a tamper-evident audit trail.
 
 **LOCK IN Hack · September 12–13, 2026**
 
+### [▶ Live demo: sentinelpay-sigma.vercel.app](https://sentinelpay-sigma.vercel.app)
+
 `Fintech / Money Track` · `Best Use of Tavily` · `Best ElevenLabs Project` · `Grand Prize` · `Best Solo Builder`
 
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=fff) ![Tests](https://img.shields.io/badge/tests-10%20passing-46be86) ![License](https://img.shields.io/badge/license-MIT-d6a23e)
@@ -30,12 +32,13 @@ payment. Every step is written to a tamper-evident audit trail.
 5. [System architecture](#5-system-architecture)
 6. [By the numbers](#6-by-the-numbers)
 7. [Quickstart](#7-quickstart)
-8. [Configuration and modes](#8-configuration-and-modes)
-9. [API reference](#9-api-reference)
-10. [Project structure](#10-project-structure)
-11. [Testing](#11-testing)
-12. [What is real, what is simulated](#12-what-is-real-what-is-simulated)
-13. [Roadmap](#13-roadmap)
+8. [Deploying to Vercel](#8-deploying-to-vercel)
+9. [Configuration and modes](#9-configuration-and-modes)
+10. [API reference](#10-api-reference)
+11. [Project structure](#11-project-structure)
+12. [Testing](#12-testing)
+13. [What is real, what is simulated](#13-what-is-real-what-is-simulated)
+14. [Roadmap](#14-roadmap)
 
 ---
 
@@ -121,7 +124,7 @@ The 3-minute stage script and judge Q&A are in [`References/DEMO_SCRIPT.md`](Ref
 
 ## 5. System architecture
 
-One Next.js app, one TypeScript codebase, one SQLite file. Every external dependency has an offline fallback. Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+One Next.js app, one TypeScript codebase, one SQLite-dialect database: hosted Turso on Vercel, a local file offline. Every external dependency has a fallback. Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```mermaid
 flowchart LR
@@ -139,7 +142,7 @@ flowchart LR
         end
         VOICE["③ Voice challenge<br/>ElevenLabs agent"]
         GOV["④ Settlement governor<br/>fail-closed"]
-        LEDGER[("Hash-chained ledger<br/>SQLite")]
+        LEDGER[("Hash-chained ledger<br/>libSQL (Turso / local file)")]
         UI["Operator dashboard<br/>polls /api/stream"]
     end
 
@@ -238,7 +241,8 @@ entryHash = SHA-256( seq | paymentId | event | JSON(payload) | prevHash )     ge
 | Layer | Choice | Why |
 |---|---|---|
 | App | Next.js 16 (App Router), React 19, TypeScript strict | UI and API in one process |
-| State | SQLite via `better-sqlite3` | Zero-config, synchronous, one file |
+| State | libSQL (`@libsql/client`): hosted Turso in production, local SQLite file offline | Same SQL everywhere; shared state across serverless instances |
+| Hosting | Vercel (Fluid compute, `after()` for background forensics) | HTTPS for the browser microphone, zero-ops deploys |
 | UI | Tailwind CSS 4, Framer Motion, self-hosted IBM Plex and JetBrains Mono | Renders identically offline |
 | Research | Tavily Search API (`search_depth: advanced`) | Registry-restricted identity and phone resolution |
 | Domain intel | RDAP via rdap.org | Free, no key, authoritative registration dates |
@@ -281,13 +285,41 @@ git clone https://github.com/roshaninfordham/sentinelpay.git
 cd sentinelpay
 pnpm install
 cp .env.example .env.local     # DEMO_MODE=cache by default, runs with zero keys
-pnpm seed                      # writes sentinel.db with the demo scenario
+pnpm seed                      # writes the demo scenario to sentinel.db (or Turso if TURSO_DATABASE_URL is set)
 pnpm dev                       # http://localhost:3000
 ```
 
 Click **Release payment** on the $240,000 Meridian wire. **Reset demo** (top right) restores the scenario. The $18,450 Northwind wire is the clean control and passes straight through the gate.
 
-## 8. Configuration and modes
+## 8. Deploying to Vercel
+
+The production deployment at **[sentinelpay-sigma.vercel.app](https://sentinelpay-sigma.vercel.app)** runs this repo on Vercel with a Turso database from the Vercel Marketplace.
+
+```bash
+vercel link                                        # link the project
+vercel integration add tursocloud/database         # hosted libSQL; injects TURSO_DATABASE_URL + TURSO_AUTH_TOKEN
+vercel env add DEMO_MODE production                # live
+vercel env add TAVILY_API_KEY production
+vercel env add ELEVENLABS_API_KEY production
+vercel env add ELEVENLABS_AGENT_ID production
+vercel env add COLUMN_API_KEY production           # optional: test_… sandbox key
+vercel env add COLUMN_SANDBOX_CONFIG production    # optional: JSON printed by `pnpm column:setup`
+vercel env add PAYMENT_SOURCE production           # column (or mock)
+vercel deploy --prod
+```
+
+Seed the hosted database once. The dashboard also auto-seeds an empty database on first load.
+
+```bash
+vercel env pull .env.turso.tmp --environment development
+set -a; . ./.env.turso.tmp; set +a; pnpm seed; rm .env.turso.tmp
+```
+
+Why Turso: serverless instances don't share a filesystem, so a local SQLite file can't hold state across the release request, the background forensics and the dashboard poll. libSQL keeps the exact same SQL and still runs against a local file for the offline demo. `.vercelignore` keeps `.env*` and local databases out of CLI uploads.
+
+The deployment is fully public, and each run spends Tavily and ElevenLabs credits. **Reset demo** restores the scenario for the next viewer.
+
+## 9. Configuration and modes
 
 All settings live in `.env.local`. See [`.env.example`](.env.example).
 
@@ -319,12 +351,13 @@ The dashboard header always shows the active mode: **Mock rail / Column sandbox 
    - creates counterparties for each vendor's account on file (••4471, ••2208) and for the attacker's account from the poisoned invoice (••9821);
    - writes the object ids to `.column-sandbox.json` (gitignored, no secrets).
 3. Set `PAYMENT_SOURCE=column` and `DEMO_MODE=live`, then `pnpm seed && pnpm dev`.
+4. On Vercel: add `COLUMN_API_KEY`, and paste the one-line JSON that setup prints as `COLUMN_SANDBOX_CONFIG`. Serverless functions have no local file to read.
 
 On this rail the gate reads the beneficiary from Column's counterparty record, not a local copy. A cleared payment creates a real sandbox wire, whose id is logged in the ledger (`RAIL_RELEASED`) and on the receipt. A frozen payment never calls the wire endpoint.
 
 > **Status:** the Column client follows Column's published docs and is covered by stubbed-HTTP tests, but it has **not yet been run against a real `test_` key**. Three details are inferred rather than confirmed by the docs we could reach: the `GET /counterparties/{id}` path, the `GET /entities` response shape, and the `Idempotency-Key` header. Expect small fixes on first run.
 
-## 9. API reference
+## 10. API reference
 
 | Method | Route | Purpose |
 |---|---|---|
@@ -359,7 +392,7 @@ curl -X POST localhost:3000/api/governor/decide -H 'content-type: application/js
 
 The challenge call runs in the operator's browser, so the dashboard must be open for a payment to move past `CHALLENGING`. `pnpm test` covers the full server path without a browser.
 
-## 10. Project structure
+## 11. Project structure
 
 ```text
 sentinelpay/
@@ -386,7 +419,7 @@ sentinelpay/
 └─ References/                      PRD · original architecture · build guide · demo script
 ```
 
-## 11. Testing
+## 12. Testing
 
 ```bash
 pnpm test        # 10 tests
@@ -401,7 +434,7 @@ pnpm build       # production build
 | `ledger.test.ts` | A valid chain verifies, and editing one row breaks it at that row. Full pipeline: gate → forensics → deny → QUARANTINED with 6 chained events. Terminal states are immutable. Authorization without a challenge is refused. |
 | `column.test.ts` | Live keys are refused. The beneficiary is read from Column. Release sends a Basic-auth, idempotent wire request with the right amount and counterparty. A freeze makes zero wire calls. |
 
-## 12. What is real, what is simulated
+## 13. What is real, what is simulated
 
 Judges ask. Here are straight answers.
 
@@ -411,10 +444,10 @@ Judges ask. Here are straight answers.
 | RDAP domain-age lookups | **Real**. `meridianglobal.com` resolves live (registered 1999-02-27). rdap.org has no RDAP server for `.co`, so the lookalike `meridian-global.co` uses a scenario fixture ("72 hours ago", relative to now). |
 | Tavily entity resolution | **Real code path** in live mode. The demo vendor is fictional, so `fixtures/tavily.json` is authored scenario data in Tavily's response shape. `(312) 555-0198` is a reserved fictional 555 number. `pnpm capture --write-tavily` records real responses. |
 | ElevenLabs voice agent | **Real integration** (token route, WebRTC session, client tools). Without keys, a scripted call with browser speech drives the identical tools. |
-| Payment rail | **Local mock** (used in the demo) or the **Column sandbox** provider. The Column provider is implemented and unit-tested against stubbed HTTP but not yet run with a real sandbox key (see [§8](#enable-the-column-sandbox-rail)). SentinelPay is a control plane: in production the bank or AP system honors its hold. |
+| Payment rail | **Local mock** (used in the demo) or the **Column sandbox** provider. The Column provider is implemented and unit-tested against stubbed HTTP but not yet run with a real sandbox key (see [§9](#enable-the-column-sandbox-rail)). SentinelPay is a control plane: in production the bank or AP system honors its hold. |
 | AP disbursement feed | Seeded scenario plus the `/api/webhook` ingest endpoint |
 
-## 13. Roadmap
+## 14. Roadmap
 
 - **Sanctions and mule screening:** OpenSanctions probe feeding the existing `sanctions_hit` rule
 - **Phone mode:** ElevenLabs + Twilio outbound call to the verified number

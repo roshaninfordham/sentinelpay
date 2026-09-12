@@ -4,7 +4,7 @@ This describes the system as built. The original pre-build design lives in [`Ref
 
 **Design goals**
 
-1. **One repo, one language, one process.** Next.js serves the dashboard and the API. SQLite holds all state.
+1. **One repo, one language, one process.** Next.js serves the dashboard and the API. One libSQL database holds all state: hosted Turso on Vercel, a local SQLite file offline.
 2. **The money decision is deterministic.** Rules decide risk and a fail-closed governor decides state. Models only research and converse.
 3. **Every external call has a fallback.** `DEMO_MODE=cache` runs the whole path with the network off.
 4. **Contracts first.** Every module builds against `src/lib/types.ts`, and rails plug in behind `PaymentSource`.
@@ -47,7 +47,7 @@ flowchart TB
         COLP["column.ts + column-client.ts"]
     end
 
-    DB[("sentinel.db<br/>vendors · payments · ledger<br/>timeline · assessments · calls")]
+    DB[("libSQL: Turso (Vercel) or sentinel.db (local)<br/>vendors · payments · ledger<br/>timeline · assessments · calls")]
     EXT_R["rdap.org"]
     EXT_T["api.tavily.com"]
     EXT_E["api.elevenlabs.io"]
@@ -183,7 +183,7 @@ flowchart LR
     E5 --> E6["#6 FROZEN<br/>h6 = head hash on receipt"]
 ```
 
-- A single global chain across all payments. Appends run inside a SQLite transaction, so `seq` and `prevHash` can't race.
+- A single global chain across all payments. Appends run inside a libSQL write transaction, so `seq` and `prevHash` can't race across serverless instances. `seq` is the primary key, so a lost race fails loudly.
 - The payload is hashed as the exact stored JSON string.
 - `verifyChain()` walks every row, checking `prevHash` linkage and recomputing `entryHash`. It returns `{ ok, brokenAt, length }`. The dashboard runs it on every poll.
 - **Threat model:** detects after-the-fact edits to history. It doesn't stop someone with database access from rewriting the whole chain. Anchoring the head hash externally (email to the CFO, a transparency log) is the production step.
@@ -222,7 +222,9 @@ flowchart LR
     BA -. would pay .-> CP3["Counterparty<br/>'Meridian' ••9821 (from poisoned invoice)"]
 ```
 
-## 5. Data model (SQLite)
+## 5. Data model (libSQL)
+
+`src/lib/db.ts` picks the backend: `TURSO_DATABASE_URL` set → hosted Turso; otherwise `file:sentinel.db` (or `SENTINEL_DB_PATH`). On Vercel without Turso it logs an error and uses an ephemeral `/tmp` file. The schema is created and migrated on first use.
 
 | Table | Columns | Notes |
 |---|---|---|

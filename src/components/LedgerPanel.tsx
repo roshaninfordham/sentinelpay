@@ -43,7 +43,7 @@ export function LedgerPanel({ entries, chainOk }: { entries: LedgerEntry[]; chai
                   <td className={`px-2 py-1.5 ${e.event === "FROZEN" ? "text-signal" : e.event === "CLEARED" ? "text-cleared" : ""}`}>
                     {EVENT_LABEL[e.event] ?? e.event}
                   </td>
-                  <td className="px-2 py-1.5 text-muted">{clock(e.ts)}</td>
+                  <td className="px-2 py-1.5 text-muted" suppressHydrationWarning>{clock(e.ts)}</td>
                   <td className="px-2 py-1.5 font-mono text-xs text-muted">{shortHash(e.prevHash)}</td>
                   <td className="px-4 py-1.5 font-mono text-xs">{shortHash(e.entryHash)}</td>
                 </tr>
