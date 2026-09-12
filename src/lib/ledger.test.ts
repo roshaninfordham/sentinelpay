@@ -9,19 +9,19 @@ process.env.DEMO_MODE = "cache";
 process.env.DEMO_PACE_MS = "0";
 
 test("two decisions form a valid chain; tampering one row breaks it", async () => {
-  const { getDb } = await import("./db");
+  const { run } = await import("./db");
   const { reseed } = await import("./seed-data");
   const { appendLedger, verifyChain, GENESIS } = await import("./ledger");
-  reseed();
+  await reseed();
 
-  const a = appendLedger("FROZEN", "pay_240k", { verdict: "DENIED" });
-  const b = appendLedger("CLEARED", "pay_18k", { reason: "match" });
+  const a = await appendLedger("FROZEN", "pay_240k", { verdict: "DENIED" });
+  const b = await appendLedger("CLEARED", "pay_18k", { reason: "match" });
   assert.equal(a.prevHash, GENESIS);
   assert.equal(b.prevHash, a.entryHash);
-  assert.deepEqual(verifyChain(), { ok: true, length: 2 });
+  assert.deepEqual(await verifyChain(), { ok: true, length: 2 });
 
-  getDb().prepare(`UPDATE ledger SET payload_json = ? WHERE seq = 1`).run(JSON.stringify({ verdict: "AUTHORIZED" }));
-  const broken = verifyChain();
+  await run(`UPDATE ledger SET payload_json = ? WHERE seq = 1`, [JSON.stringify({ verdict: "AUTHORIZED" })]);
+  const broken = await verifyChain();
   assert.equal(broken.ok, false);
   assert.equal(broken.brokenAt, 1);
 });
@@ -31,7 +31,7 @@ test("end to end (cache mode): gate → forensics → deny → QUARANTINED with 
   const { runGate } = await import("./gate");
   const { investigate } = await import("./forensics");
   const { decide } = await import("./governor");
-  reseed();
+  await reseed();
 
   const gate = await runGate("pay_240k");
   assert.equal(gate.status, "PENDING_REVIEW");

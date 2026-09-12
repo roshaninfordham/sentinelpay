@@ -22,7 +22,7 @@ export async function runGate(paymentId: string): Promise<GateResult> {
   }
   const vendor = await vendorDirectory().get(payment.vendorId);
 
-  emit(paymentId, "info", `→ Release requested: ${usd(payment.amountCents)} to ${vendor.legalName}`);
+  await emit(paymentId, "info", `→ Release requested: ${usd(payment.amountCents)} to ${vendor.legalName}`);
 
   const mismatches: string[] = [];
   if (payment.claimedBankLast4 !== vendor.knownBankLast4) {
@@ -34,18 +34,18 @@ export async function runGate(paymentId: string): Promise<GateResult> {
 
   if (mismatches.length === 0) {
     await source.setStatus(paymentId, "CLEARED");
-    appendLedger("CLEARED", paymentId, { reason: "beneficiary and request domain match vendor master" });
-    emit(paymentId, "ok", `✔ Beneficiary matches vendor master (••${vendor.knownBankLast4}) — released`);
+    await appendLedger("CLEARED", paymentId, { reason: "beneficiary and request domain match vendor master" });
+    await emit(paymentId, "ok", `✔ Beneficiary matches vendor master (••${vendor.knownBankLast4}) — released`);
     return { paymentId, status: "CLEARED", mismatches, investigate: false };
   }
 
   await source.setStatus(paymentId, "PENDING_REVIEW");
-  appendLedger("INTERCEPTED", paymentId, {
+  await appendLedger("INTERCEPTED", paymentId, {
     mismatches,
     onFile: { bankLast4: vendor.knownBankLast4, domain: vendor.knownDomain },
     claimed: { bankLast4: payment.claimedBankLast4, domain: payment.requestSourceDomain },
   });
-  emit(paymentId, "alert", `⚠ ${mismatches[0]} — release HELD`);
-  for (const m of mismatches.slice(1)) emit(paymentId, "warn", `⚠ ${m}`);
+  await emit(paymentId, "alert", `⚠ ${mismatches[0]} — release HELD`);
+  for (const m of mismatches.slice(1)) await emit(paymentId, "warn", `⚠ ${m}`);
   return { paymentId, status: "PENDING_REVIEW", mismatches, investigate: true };
 }

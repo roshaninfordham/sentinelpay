@@ -62,6 +62,7 @@ async function main() {
   };
   writeFileSync(COLUMN_CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
   console.log(`\nWrote ${path.relative(root, COLUMN_CONFIG_PATH)}. Set PAYMENT_SOURCE=column and DEMO_MODE=live, then pnpm seed && pnpm dev.`);
+  console.log(`\nFor Vercel, add this as COLUMN_SANDBOX_CONFIG:\n${JSON.stringify(config)}`);
 }
 
 main().catch((e) => {

@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     return Response.json({ error: (err as Error).message }, { status: 404 });
   }
 
-  const assessment = readAssessment(paymentId);
+  const assessment = await readAssessment(paymentId);
   const dynamicVariables = {
     payment_id: payment.id,
     amount: (payment.amountCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }),

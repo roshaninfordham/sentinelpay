@@ -1,4 +1,4 @@
-import { getDb } from "../db";
+import { run } from "../db";
 import { appendLedger } from "../ledger";
 import { emit } from "../timeline";
 import type { Payment, PaymentStatus } from "../types";
@@ -30,9 +30,7 @@ export class ColumnPaymentSource extends MockPaymentSource {
     const cp = await this.client.getCounterparty(counterpartyId);
     const last4 = cp.account_number.slice(-4);
     if (last4 !== payment.claimedBankLast4 || payment.railCounterpartyId !== counterpartyId) {
-      getDb()
-        .prepare(`UPDATE payments SET claimedBankLast4 = ?, railCounterpartyId = ? WHERE id = ?`)
-        .run(last4, counterpartyId, id);
+      await run(`UPDATE payments SET claimedBankLast4 = ?, railCounterpartyId = ? WHERE id = ?`, [last4, counterpartyId, id]);
     }
     return { ...payment, claimedBankLast4: last4, railCounterpartyId: counterpartyId };
   }
@@ -41,7 +39,7 @@ export class ColumnPaymentSource extends MockPaymentSource {
     await super.setStatus(id, status);
     if (status === "CLEARED") await this.release(id);
     if (status === "QUARANTINED") {
-      emit(id, "ok", `■ Column sandbox: no wire created, funds remain in account ${this.config.bankAccountId}`);
+      await emit(id, "ok", `■ Column sandbox: no wire created, funds remain in account ${this.config.bankAccountId}`);
     }
   }
 
@@ -50,7 +48,7 @@ export class ColumnPaymentSource extends MockPaymentSource {
     if (payment.railReference) return;
     const counterpartyId = payment.railCounterpartyId ?? this.config.paymentCounterparties[id];
     if (!counterpartyId) {
-      emit(id, "warn", `Column sandbox: no counterparty mapped for ${id}; release recorded locally only`);
+      await emit(id, "warn", `Column sandbox: no counterparty mapped for ${id}; release recorded locally only`);
       return;
     }
     try {
@@ -63,12 +61,12 @@ export class ColumnPaymentSource extends MockPaymentSource {
         },
         `sentinelpay-${id}`,
       );
-      getDb().prepare(`UPDATE payments SET railReference = ? WHERE id = ?`).run(wire.id, id);
-      appendLedger("RAIL_RELEASED", id, { rail: "column-sandbox", wireId: wire.id, status: wire.status, amountCents: wire.amount });
-      emit(id, "ok", `✔ Column sandbox wire ${wire.id} created for ${usd(payment.amountCents)} (status ${wire.status})`);
+      await run(`UPDATE payments SET railReference = ? WHERE id = ?`, [wire.id, id]);
+      await appendLedger("RAIL_RELEASED", id, { rail: "column-sandbox", wireId: wire.id, status: wire.status, amountCents: wire.amount });
+      await emit(id, "ok", `✔ Column sandbox wire ${wire.id} created for ${usd(payment.amountCents)} (status ${wire.status})`);
     } catch (err) {
-      appendLedger("RAIL_ERROR", id, { rail: "column-sandbox", error: (err as Error).message });
-      emit(id, "alert", `✖ Column sandbox release failed: ${(err as Error).message}`);
+      await appendLedger("RAIL_ERROR", id, { rail: "column-sandbox", error: (err as Error).message });
+      await emit(id, "alert", `✖ Column sandbox release failed: ${(err as Error).message}`);
     }
   }
 }

@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-// Written by `pnpm column:setup`. Holds sandbox object ids only (no secrets). Gitignored.
+// Written by `pnpm column:setup` to .column-sandbox.json (local) and printed for COLUMN_SANDBOX_CONFIG (Vercel).
+// Holds sandbox object ids only, no secrets.
 
 export interface ColumnSandboxConfig {
   createdAt: string;
@@ -16,6 +17,15 @@ export interface ColumnSandboxConfig {
 export const COLUMN_CONFIG_PATH = path.join(process.cwd(), ".column-sandbox.json");
 
 export function loadColumnConfig(): ColumnSandboxConfig | null {
+  // On Vercel there is no local file: `pnpm column:setup` prints this JSON for the COLUMN_SANDBOX_CONFIG env var.
+  if (process.env.COLUMN_SANDBOX_CONFIG) {
+    try {
+      return JSON.parse(process.env.COLUMN_SANDBOX_CONFIG) as ColumnSandboxConfig;
+    } catch {
+      console.error("[sentinelpay] COLUMN_SANDBOX_CONFIG is not valid JSON");
+      return null;
+    }
+  }
   const file = process.env.COLUMN_CONFIG_PATH ?? COLUMN_CONFIG_PATH;
   if (!existsSync(file)) return null;
   try {

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { getDb } from "./db";
+import { all, one, run, writeTransaction } from "./db";
 import type { LedgerEntry } from "./types";
 
 // Node 4 — tamper-evident audit ledger (ARCHITECTURE §4).
@@ -22,7 +22,7 @@ export function hashEntry(seq: number, paymentId: string, event: string, payload
 }
 
 const toEntry = (r: Row): LedgerEntry => ({
-  seq: r.seq,
+  seq: Number(r.seq),
   paymentId: r.paymentId,
   event: r.event,
   payload: JSON.parse(r.payload_json),
@@ -31,13 +31,12 @@ const toEntry = (r: Row): LedgerEntry => ({
   ts: r.ts,
 });
 
-export function appendLedger(event: string, paymentId: string, payload: unknown): LedgerEntry {
-  const db = getDb();
-  return db.transaction(() => {
-    const last = db.prepare(`SELECT seq, entryHash FROM ledger ORDER BY seq DESC LIMIT 1`).get() as
-      | { seq: number; entryHash: string }
-      | undefined;
-    const seq = (last?.seq ?? 0) + 1;
+export async function appendLedger(event: string, paymentId: string, payload: unknown): Promise<LedgerEntry> {
+  // Read-tail and insert in one write transaction so concurrent appends can't fork the chain.
+  // `seq` is the primary key, so a lost race fails loudly instead of silently.
+  return writeTransaction(async (tx) => {
+    const last = await one<{ seq: number; entryHash: string }>(`SELECT seq, entryHash FROM ledger ORDER BY seq DESC LIMIT 1`, [], tx);
+    const seq = Number(last?.seq ?? 0) + 1;
     const prevHash = last?.entryHash ?? GENESIS;
     const payloadJson = JSON.stringify(payload ?? null);
     const row: Row = {
@@ -49,31 +48,30 @@ export function appendLedger(event: string, paymentId: string, payload: unknown)
       entryHash: hashEntry(seq, paymentId, event, payloadJson, prevHash),
       ts: new Date().toISOString(),
     };
-    db.prepare(
-      `INSERT INTO ledger (seq, paymentId, event, payload_json, prevHash, entryHash, ts)
-       VALUES (@seq, @paymentId, @event, @payload_json, @prevHash, @entryHash, @ts)`,
-    ).run(row);
+    await run(
+      `INSERT INTO ledger (seq, paymentId, event, payload_json, prevHash, entryHash, ts) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [row.seq, row.paymentId, row.event, row.payload_json, row.prevHash, row.entryHash, row.ts],
+      tx,
+    );
     return toEntry(row);
-  })();
+  });
 }
 
-export function readLedger(paymentId?: string): LedgerEntry[] {
-  const db = getDb();
-  const rows = (
-    paymentId
-      ? db.prepare(`SELECT * FROM ledger WHERE paymentId = ? ORDER BY seq`).all(paymentId)
-      : db.prepare(`SELECT * FROM ledger ORDER BY seq`).all()
-  ) as Row[];
+export async function readLedger(paymentId?: string): Promise<LedgerEntry[]> {
+  const rows = paymentId
+    ? await all<Row>(`SELECT * FROM ledger WHERE paymentId = ? ORDER BY seq`, [paymentId])
+    : await all<Row>(`SELECT * FROM ledger ORDER BY seq`);
   return rows.map(toEntry);
 }
 
 /** Recomputes every hash from the stored rows. One edited row breaks the chain from that seq onward. */
-export function verifyChain(): { ok: boolean; brokenAt?: number; length: number } {
-  const rows = getDb().prepare(`SELECT * FROM ledger ORDER BY seq`).all() as Row[];
+export async function verifyChain(): Promise<{ ok: boolean; brokenAt?: number; length: number }> {
+  const rows = await all<Row>(`SELECT * FROM ledger ORDER BY seq`);
   let prev = GENESIS;
   for (const r of rows) {
-    const expected = hashEntry(r.seq, r.paymentId, r.event, r.payload_json, r.prevHash);
-    if (r.prevHash !== prev || r.entryHash !== expected) return { ok: false, brokenAt: r.seq, length: rows.length };
+    const seq = Number(r.seq);
+    const expected = hashEntry(seq, r.paymentId, r.event, r.payload_json, r.prevHash);
+    if (r.prevHash !== prev || r.entryHash !== expected) return { ok: false, brokenAt: seq, length: rows.length };
     prev = r.entryHash;
   }
   return { ok: true, length: rows.length };

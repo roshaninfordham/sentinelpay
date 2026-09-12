@@ -3,6 +3,8 @@ import { investigate } from "@/lib/forensics";
 import { runGate } from "@/lib/gate";
 
 export const dynamic = "force-dynamic";
+// Forensics runs in after(); give it room for live RDAP + Tavily calls and audience pacing.
+export const maxDuration = 60;
 
 // Operator clicks "Release payment" → the gate decides whether money may move.
 export async function POST(req: Request) {

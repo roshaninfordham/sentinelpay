@@ -4,6 +4,6 @@ export const dynamic = "force-dynamic";
 
 // One-click "reset demo": wipes state and re-writes the seeded scenario.
 export async function POST() {
-  reseed();
+  await reseed();
   return Response.json({ ok: true });
 }

@@ -1,6 +1,7 @@
 import { investigate, readAssessment } from "@/lib/forensics";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 // Runs forensics synchronously for a payment in PENDING_REVIEW and returns the RiskAssessment.
 // The release/webhook routes schedule this automatically; this endpoint exists for direct testing.
@@ -16,6 +17,6 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   const paymentId = new URL(req.url).searchParams.get("paymentId");
-  const a = paymentId ? readAssessment(paymentId) : undefined;
+  const a = paymentId ? await readAssessment(paymentId) : undefined;
   return a ? Response.json(a) : Response.json({ error: "no assessment" }, { status: 404 });
 }

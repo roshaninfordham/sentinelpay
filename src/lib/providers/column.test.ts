@@ -48,7 +48,7 @@ test("clean payment: beneficiary read from Column, release creates a sandbox wir
   const { reseed } = await import("../seed-data");
   const { runGate } = await import("../gate");
   const { readLedger } = await import("../ledger");
-  reseed();
+  await reseed();
 
   const r = await runGate("pay_18k");
   assert.equal(r.status, "CLEARED");
@@ -60,19 +60,19 @@ test("clean payment: beneficiary read from Column, release creates a sandbox wir
   assert.equal(body.get("amount"), "1845000");
   assert.equal(body.get("counterparty_id"), "cpty_northwind");
   assert.equal(body.get("bank_account_id"), "bacc_ap");
-  assert.ok(readLedger("pay_18k").some((e) => e.event === "RAIL_RELEASED"));
+  assert.ok((await readLedger("pay_18k")).some((e) => e.event === "RAIL_RELEASED"));
 });
 
 test("poisoned payment: gate uses the rail's account (••9821); freeze never creates a wire", async () => {
   const { reseed } = await import("../seed-data");
-  const { getDb } = await import("../db");
+  const { run } = await import("../db");
   const { runGate } = await import("../gate");
   const { investigate } = await import("../forensics");
   const { decide } = await import("../governor");
-  reseed();
+  await reseed();
   calls.length = 0;
   // Local AP copy says the account is unchanged; the rail's counterparty record is what counts.
-  getDb().prepare(`UPDATE payments SET claimedBankLast4 = '4471' WHERE id = 'pay_240k'`).run();
+  await run(`UPDATE payments SET claimedBankLast4 = '4471' WHERE id = 'pay_240k'`);
 
   const r = await runGate("pay_240k");
   assert.equal(r.status, "PENDING_REVIEW");

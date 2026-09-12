@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { run } from "./db";
 import { appendLedger } from "./ledger";
 import { paymentSource } from "./providers";
 import { buildReceipt, type IncidentReceipt } from "./receipt";
@@ -43,18 +43,18 @@ export async function decide(input: DecideInput): Promise<IncidentReceipt> {
     toolInvoked: input.toolInvoked ?? null,
     durationSec: Math.max(0, Math.round(input.durationSec ?? 0)),
   };
-  getDb().prepare(`INSERT OR REPLACE INTO calls (paymentId, json) VALUES (?, ?)`).run(payment.id, JSON.stringify(call));
-  appendLedger("CALL_RESULT", payment.id, call);
+  await run(`INSERT OR REPLACE INTO calls (paymentId, json) VALUES (?, ?)`, [payment.id, JSON.stringify(call)]);
+  await appendLedger("CALL_RESULT", payment.id, call);
 
   const amount = (payment.amountCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
   if (input.verdict === "AUTHORIZED") {
     await source.setStatus(payment.id, "CLEARED");
-    appendLedger("CLEARED", payment.id, { verdict: call.verdict, toolInvoked: call.toolInvoked });
-    emit(payment.id, "ok", `✔ Vendor controller authorized the change — ${amount} released`);
+    await appendLedger("CLEARED", payment.id, { verdict: call.verdict, toolInvoked: call.toolInvoked });
+    await emit(payment.id, "ok", `✔ Vendor controller authorized the change — ${amount} released`);
   } else {
     await source.setStatus(payment.id, "QUARANTINED");
-    appendLedger("FROZEN", payment.id, { verdict: call.verdict, toolInvoked: call.toolInvoked, amountCents: payment.amountCents });
-    emit(
+    await appendLedger("FROZEN", payment.id, { verdict: call.verdict, toolInvoked: call.toolInvoked, amountCents: payment.amountCents });
+    await emit(
       payment.id,
       "alert",
       input.verdict === "DENIED"

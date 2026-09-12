@@ -5,6 +5,8 @@ import { paymentSource } from "@/lib/providers";
 import type { Payment } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+// Forensics runs in after(); give it room for live RDAP + Tavily calls and audience pacing.
+export const maxDuration = 60;
 
 // Mock ERP/AP disbursement event. Accepts a Payment-shaped body, ingests it as RECEIVED, runs the gate.
 export async function POST(req: Request) {
@@ -34,7 +36,7 @@ export async function POST(req: Request) {
     if (existing && existing.status !== "RECEIVED") {
       return Response.json({ error: `payment ${payment.id} already ${existing.status}` }, { status: 409 });
     }
-    source.upsert(payment);
+    await source.upsert(payment);
     const result = await runGate(payment.id);
     if (result.investigate) after(() => investigate(payment.id).catch((e) => console.error("[investigate]", e)));
     return Response.json(result, { status: 202 });

@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { one } from "./db";
 import { readAssessment } from "./forensics";
 import { readLedger, verifyChain } from "./ledger";
 import { paymentSource, vendorDirectory } from "./providers";
@@ -16,24 +16,24 @@ export interface IncidentReceipt {
   chain: { ok: boolean; brokenAt?: number; length: number };
 }
 
-export function readCall(paymentId: string): CallOutcome | undefined {
-  const row = getDb().prepare(`SELECT json FROM calls WHERE paymentId = ?`).get(paymentId) as { json: string } | undefined;
+export async function readCall(paymentId: string): Promise<CallOutcome | undefined> {
+  const row = await one<{ json: string }>(`SELECT json FROM calls WHERE paymentId = ?`, [paymentId]);
   return row ? (JSON.parse(row.json) as CallOutcome) : undefined;
 }
 
 export async function buildReceipt(paymentId: string): Promise<IncidentReceipt> {
   const payment = await paymentSource().get(paymentId);
   const vendor = await vendorDirectory().get(payment.vendorId);
-  const entries = readLedger(paymentId);
+  const entries = await readLedger(paymentId);
   return {
     incidentId: `INC-${paymentId.toUpperCase()}-${entries[0]?.seq ?? 0}`,
     generatedAt: new Date().toISOString(),
     payment,
     vendor,
-    assessment: readAssessment(paymentId),
-    call: readCall(paymentId),
+    assessment: await readAssessment(paymentId),
+    call: await readCall(paymentId),
     entries,
     headHash: entries.at(-1)?.entryHash ?? null,
-    chain: verifyChain(),
+    chain: await verifyChain(),
   };
 }

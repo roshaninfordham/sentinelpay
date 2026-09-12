@@ -52,24 +52,22 @@ export function seedPayments(now = Date.now()): Payment[] {
 }
 
 /** Wipes all state and writes the demo scenario. Used by `pnpm seed` and the reset button. */
-export function reseed(): void {
-  const db = getDb();
-  const insertVendor = db.prepare(
-    `INSERT INTO vendors (id, legalName, knownDomain, knownBankLast4, verifiedPhone, registryUrl)
-     VALUES (@id, @legalName, @knownDomain, @knownBankLast4, @verifiedPhone, @registryUrl)`,
+export async function reseed(): Promise<void> {
+  const db = await getDb();
+  await db.batch(
+    [
+      ...["timeline", "assessments", "calls", "ledger", "payments", "vendors"].map((t) => `DELETE FROM ${t}`),
+      `DELETE FROM sqlite_sequence WHERE name = 'timeline'`,
+      ...VENDORS.map((v) => ({
+        sql: `INSERT INTO vendors (id, legalName, knownDomain, knownBankLast4, verifiedPhone, registryUrl) VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [v.id, v.legalName, v.knownDomain, v.knownBankLast4, v.verifiedPhone ?? null, v.registryUrl ?? null],
+      })),
+      ...seedPayments().map((p) => ({
+        sql: `INSERT INTO payments (id, vendorId, amountCents, currency, claimedBankLast4, requestSourceDomain,
+                                   invoiceContactPhone, status, createdAt, memo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [p.id, p.vendorId, p.amountCents, p.currency, p.claimedBankLast4, p.requestSourceDomain, p.invoiceContactPhone ?? null, p.status, p.createdAt, p.memo ?? null],
+      })),
+    ],
+    "write",
   );
-  const insertPayment = db.prepare(
-    `INSERT INTO payments (id, vendorId, amountCents, currency, claimedBankLast4, requestSourceDomain,
-                           invoiceContactPhone, status, createdAt, memo)
-     VALUES (@id, @vendorId, @amountCents, @currency, @claimedBankLast4, @requestSourceDomain,
-             @invoiceContactPhone, @status, @createdAt, @memo)`,
-  );
-  db.transaction(() => {
-    for (const t of ["timeline", "assessments", "calls", "ledger", "payments", "vendors"]) {
-      db.exec(`DELETE FROM ${t}`);
-    }
-    db.exec(`DELETE FROM sqlite_sequence WHERE name = 'timeline'`);
-    for (const v of VENDORS) insertVendor.run({ verifiedPhone: null, registryUrl: null, ...v });
-    for (const p of seedPayments()) insertPayment.run({ invoiceContactPhone: null, memo: null, ...p });
-  })();
 }

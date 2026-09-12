@@ -1,4 +1,4 @@
-import { getDb } from "../db";
+import { all, one, run } from "../db";
 import type { Payment, PaymentSource, PaymentStatus, Vendor, VendorDirectory } from "../types";
 
 type Nullable<T> = { [K in keyof T]: T[K] | null };
@@ -8,47 +8,49 @@ function stripNulls<T extends object>(row: Nullable<T>): T {
   return Object.fromEntries(Object.entries(row).filter(([, v]) => v !== null)) as T;
 }
 
+const toPayment = (r: Nullable<Payment>): Payment => {
+  const p = stripNulls<Payment>(r);
+  return { ...p, amountCents: Number(p.amountCents) };
+};
+
 export class MockPaymentSource implements PaymentSource {
   async listPending(): Promise<Payment[]> {
-    return this.listAll().filter((p) => p.status !== "CLEARED" && p.status !== "QUARANTINED");
+    return (await this.listAll()).filter((p) => p.status !== "CLEARED" && p.status !== "QUARANTINED");
   }
 
-  listAll(): Payment[] {
-    const rows = getDb().prepare(`SELECT * FROM payments ORDER BY createdAt DESC`).all() as Nullable<Payment>[];
-    return rows.map((r) => stripNulls<Payment>(r));
+  async listAll(): Promise<Payment[]> {
+    return (await all<Nullable<Payment>>(`SELECT * FROM payments ORDER BY createdAt DESC`)).map(toPayment);
   }
 
   async get(id: string): Promise<Payment> {
-    const row = getDb().prepare(`SELECT * FROM payments WHERE id = ?`).get(id) as Nullable<Payment> | undefined;
+    const row = await one<Nullable<Payment>>(`SELECT * FROM payments WHERE id = ?`, [id]);
     if (!row) throw new Error(`payment ${id} not found`);
-    return stripNulls<Payment>(row);
+    return toPayment(row);
   }
 
   async setStatus(id: string, status: PaymentStatus): Promise<void> {
-    getDb().prepare(`UPDATE payments SET status = ? WHERE id = ?`).run(status, id);
+    await run(`UPDATE payments SET status = ? WHERE id = ?`, [status, id]);
   }
 
   /** Webhook ingest: insert or replace the disbursement as it arrived. */
-  upsert(p: Payment): void {
-    getDb()
-      .prepare(
-        `INSERT OR REPLACE INTO payments (id, vendorId, amountCents, currency, claimedBankLast4, requestSourceDomain,
-                                          invoiceContactPhone, status, createdAt, memo)
-         VALUES (@id, @vendorId, @amountCents, @currency, @claimedBankLast4, @requestSourceDomain,
-                 @invoiceContactPhone, @status, @createdAt, @memo)`,
-      )
-      .run({ invoiceContactPhone: null, memo: null, ...p });
+  async upsert(p: Payment): Promise<void> {
+    await run(
+      `INSERT OR REPLACE INTO payments (id, vendorId, amountCents, currency, claimedBankLast4, requestSourceDomain,
+                                        invoiceContactPhone, status, createdAt, memo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.id, p.vendorId, p.amountCents, p.currency, p.claimedBankLast4, p.requestSourceDomain, p.invoiceContactPhone ?? null, p.status, p.createdAt, p.memo ?? null],
+    );
   }
 }
 
 export class MockVendorDirectory implements VendorDirectory {
   async get(vendorId: string): Promise<Vendor> {
-    const row = getDb().prepare(`SELECT * FROM vendors WHERE id = ?`).get(vendorId) as Nullable<Vendor> | undefined;
+    const row = await one<Nullable<Vendor>>(`SELECT * FROM vendors WHERE id = ?`, [vendorId]);
     if (!row) throw new Error(`vendor ${vendorId} not found`);
     return stripNulls<Vendor>(row);
   }
 
-  listAll(): Vendor[] {
-    return (getDb().prepare(`SELECT * FROM vendors`).all() as Nullable<Vendor>[]).map((r) => stripNulls<Vendor>(r));
+  async listAll(): Promise<Vendor[]> {
+    return (await all<Nullable<Vendor>>(`SELECT * FROM vendors`)).map((r) => stripNulls<Vendor>(r));
   }
 }

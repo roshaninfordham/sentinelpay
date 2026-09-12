@@ -1,4 +1,4 @@
-import { getDb } from "../db";
+import { one, run } from "../db";
 import { paceMs, sleep } from "../env";
 import { appendLedger } from "../ledger";
 import { paymentSource, vendorDirectory } from "../providers";
@@ -27,7 +27,7 @@ const running = new Set<string>();
 export async function investigate(paymentId: string): Promise<RiskAssessment> {
   const source = paymentSource();
   const payment = await source.get(paymentId);
-  const existing = readAssessment(paymentId);
+  const existing = await readAssessment(paymentId);
   if (existing && payment.status !== "PENDING_REVIEW") return existing;
   if (running.has(paymentId)) throw new Error(`investigation already running for ${paymentId}`);
   if (payment.status !== "PENDING_REVIEW") throw new Error(`payment ${paymentId} is ${payment.status}, not PENDING_REVIEW`);
@@ -38,8 +38,8 @@ export async function investigate(paymentId: string): Promise<RiskAssessment> {
     const pace = paceMs();
 
     await source.setStatus(paymentId, "INVESTIGATING");
-    appendLedger("INVESTIGATION_STARTED", paymentId, { status: "INVESTIGATING" });
-    emit(paymentId, "info", `▶ Forensics  launching RDAP + Tavily probes in parallel`);
+    await appendLedger("INVESTIGATION_STARTED", paymentId, { status: "INVESTIGATING" });
+    await emit(paymentId, "info", `▶ Forensics  launching RDAP + Tavily probes in parallel`);
 
     const [reqRdap, knownRdap, entity] = await Promise.all([
       lookupDomain(payment.requestSourceDomain),
@@ -48,14 +48,14 @@ export async function investigate(paymentId: string): Promise<RiskAssessment> {
     ]);
 
     await sleep(pace);
-    emit(paymentId, "probe", `▶ RDAP    ${payment.requestSourceDomain} … ${describeAge(reqRdap)}${cachedTag(reqRdap.origin, reqRdap.note)}`);
+    await emit(paymentId, "probe", `▶ RDAP    ${payment.requestSourceDomain} … ${describeAge(reqRdap)}${cachedTag(reqRdap.origin, reqRdap.note)}`);
     if (knownRdap) {
       await sleep(pace * 0.6);
-      emit(paymentId, "probe", `▶ RDAP    ${vendor.knownDomain} (vendor of record) … ${describeAge(knownRdap)}${cachedTag(knownRdap.origin, knownRdap.note)}`);
+      await emit(paymentId, "probe", `▶ RDAP    ${vendor.knownDomain} (vendor of record) … ${describeAge(knownRdap)}${cachedTag(knownRdap.origin, knownRdap.note)}`);
     }
 
     await sleep(pace);
-    emit(
+    await emit(
       paymentId,
       "probe",
       entity.entityResolved
@@ -63,7 +63,7 @@ export async function investigate(paymentId: string): Promise<RiskAssessment> {
         : `▶ Tavily  resolving real entity … no registry match for ${vendor.legalName}${cachedTag(entity.origin, entity.note)}`,
     );
     await sleep(pace * 0.6);
-    emit(
+    await emit(
       paymentId,
       entity.requestDomainLinked ? "probe" : "warn",
       entity.requestDomainLinked
@@ -73,7 +73,7 @@ export async function investigate(paymentId: string): Promise<RiskAssessment> {
 
     await sleep(pace);
     const invoiceDiffers = entity.verifiedPhone && payment.invoiceContactPhone;
-    emit(
+    await emit(
       paymentId,
       entity.verifiedPhone ? "probe" : "warn",
       entity.verifiedPhone
@@ -109,18 +109,18 @@ export async function investigate(paymentId: string): Promise<RiskAssessment> {
 
     const assessment = assessRisk(signals, payment.invoiceContactPhone);
     if (assessment.verifiedCallbackPhone) {
-      getDb().prepare(`UPDATE vendors SET verifiedPhone = ? WHERE id = ?`).run(assessment.verifiedCallbackPhone, vendor.id);
+      await run(`UPDATE vendors SET verifiedPhone = ? WHERE id = ?`, [assessment.verifiedCallbackPhone, vendor.id]);
     }
-    getDb().prepare(`INSERT OR REPLACE INTO assessments (paymentId, json) VALUES (?, ?)`).run(paymentId, JSON.stringify(assessment));
-    appendLedger("FORENSICS", paymentId, assessment);
+    await run(`INSERT OR REPLACE INTO assessments (paymentId, json) VALUES (?, ?)`, [paymentId, JSON.stringify(assessment)]);
+    await appendLedger("FORENSICS", paymentId, assessment);
 
     await sleep(pace);
-    emit(paymentId, "risk", `● RISK: ${assessment.level} (score ${assessment.score})`);
+    await emit(paymentId, "risk", `● RISK: ${assessment.level} (score ${assessment.score})`);
 
     await sleep(pace);
     await source.setStatus(paymentId, "CHALLENGING");
-    appendLedger("CHALLENGE_STARTED", paymentId, { dial: assessment.verifiedCallbackPhone ?? null });
-    emit(
+    await appendLedger("CHALLENGE_STARTED", paymentId, { dial: assessment.verifiedCallbackPhone ?? null });
+    await emit(
       paymentId,
       "call",
       assessment.verifiedCallbackPhone
@@ -129,14 +129,14 @@ export async function investigate(paymentId: string): Promise<RiskAssessment> {
     );
     return assessment;
   } catch (err) {
-    emit(paymentId, "alert", `✖ Forensics error: ${(err as Error).message} — payment remains held`);
+    await emit(paymentId, "alert", `✖ Forensics error: ${(err as Error).message} — payment remains held`);
     throw err;
   } finally {
     running.delete(paymentId);
   }
 }
 
-export function readAssessment(paymentId: string): RiskAssessment | undefined {
-  const row = getDb().prepare(`SELECT json FROM assessments WHERE paymentId = ?`).get(paymentId) as { json: string } | undefined;
+export async function readAssessment(paymentId: string): Promise<RiskAssessment | undefined> {
+  const row = await one<{ json: string }>(`SELECT json FROM assessments WHERE paymentId = ?`, [paymentId]);
   return row ? (JSON.parse(row.json) as RiskAssessment) : undefined;
 }

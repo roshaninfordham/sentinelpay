@@ -1,34 +1,32 @@
-import { getDb } from "./db";
+import { all } from "./db";
 import { demoMode } from "./env";
 import { readLedger, verifyChain } from "./ledger";
 import { paymentSource, railStatus, vendorDirectory } from "./providers";
 import { readTimeline } from "./timeline";
 import type { CallOutcome, RiskAssessment, Snapshot } from "./types";
 
-export function snapshot(): Snapshot {
-  const db = getDb();
-  const assessments = Object.fromEntries(
-    (db.prepare(`SELECT paymentId, json FROM assessments`).all() as { paymentId: string; json: string }[]).map((r) => [
-      r.paymentId,
-      JSON.parse(r.json) as RiskAssessment,
-    ]),
-  );
-  const calls = Object.fromEntries(
-    (db.prepare(`SELECT paymentId, json FROM calls`).all() as { paymentId: string; json: string }[]).map((r) => [
-      r.paymentId,
-      JSON.parse(r.json) as CallOutcome,
-    ]),
-  );
-  const chain = verifyChain();
+const byPayment = <T>(rows: { paymentId: string; json: string }[]) =>
+  Object.fromEntries(rows.map((r) => [r.paymentId, JSON.parse(r.json) as T]));
+
+export async function snapshot(): Promise<Snapshot> {
+  const [assessments, calls, payments, vendors, timeline, ledger, chain] = await Promise.all([
+    all<{ paymentId: string; json: string }>(`SELECT paymentId, json FROM assessments`),
+    all<{ paymentId: string; json: string }>(`SELECT paymentId, json FROM calls`),
+    paymentSource().listAll(),
+    vendorDirectory().listAll(),
+    readTimeline(),
+    readLedger(),
+    verifyChain(),
+  ]);
   return {
     demoMode: demoMode(),
     rail: railStatus(),
-    payments: paymentSource().listAll(),
-    vendors: vendorDirectory().listAll(),
-    timeline: readTimeline(),
-    assessments,
-    calls,
-    ledger: readLedger(),
+    payments,
+    vendors,
+    timeline: timeline.map((l) => ({ ...l, id: Number(l.id) })),
+    assessments: byPayment<RiskAssessment>(assessments),
+    calls: byPayment<CallOutcome>(calls),
+    ledger,
     chain: { ok: chain.ok, brokenAt: chain.brokenAt },
   };
 }
