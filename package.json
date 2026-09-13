@@ -10,12 +10,14 @@
     "seed": "tsx scripts/seed.ts",
     "demo:reset": "tsx scripts/seed.ts --reset",
     "capture": "tsx scripts/capture-fixtures.ts",
-    "test": "tsx --test \"src/**/*.test.ts\" \"packages/*/test/**/*.test.ts\"",
+    "test": "tsx --test \"src/**/*.test.ts\" \"packages/*/test/**/*.test.ts\" \"evals/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "column:setup": "tsx scripts/column-setup.ts",
     "test:engine": "tsx --test \"packages/engine/test/**/*.test.ts\"",
     "smoke:pack": "node scripts/pack-smoke.mjs",
-    "voice:setup": "tsx scripts/elevenlabs-setup.ts"
+    "voice:setup": "tsx scripts/elevenlabs-setup.ts",
+    "eval:voice": "tsx evals/voice-agent.eval.ts",
+    "example:agent": "tsx examples/payments-agent.ts"
   },
   "dependencies": {
     "@elevenlabs/react": "^1.15.2",
