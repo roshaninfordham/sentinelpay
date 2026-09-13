@@ -93,6 +93,9 @@ export function CallConsole({
     transcriptBox.current?.scrollTo({ top: transcriptBox.current.scrollHeight, behavior: reduce ? "auto" : "smooth" });
   }, [lines.length]);
 
+  // Set when either tool reached the governor, so a hang-up without a decision can be recorded as one.
+  const decided = useRef(false);
+
   const push = useCallback((l: Line) => {
     linesRef.current = [...linesRef.current, l];
     setLines(linesRef.current);
@@ -105,7 +108,10 @@ export function CallConsole({
       responderToken: token.responderToken,
       startedAt,
       transcript: () => linesRef.current.map((l) => `${l.speaker === "agent" ? "Agent" : "Vendor"}: ${l.text}`).join("\n"),
-      onDecided: () => onDecided(),
+      onDecided: () => {
+        decided.current = true;
+        onDecided();
+      },
     }),
     [payment.id, onDecided],
   );
@@ -193,13 +199,22 @@ export function CallConsole({
         connectionType: "webrtc",
         dynamicVariables: token.dynamicVariables,
         clientTools: createClientTools(ctx(startedAt, token)),
-        onConnect: () => setPhase("live"),
+        onConnect: () => {
+          setPhase("live");
+          setNote("Live call. Use headphones so the agent doesn't hear itself through your speakers.");
+        },
         onMessage: ({ message, role }) => push({ speaker: role === "agent" ? "agent" : "vendor", text: message }),
         onModeChange: ({ mode }) => setSpeaking(mode === "speaking" ? "agent" : null),
         onDisconnect: () => {
           session.current = null;
           setSpeaking(null);
           setPhase((p) => (p === "simulated" ? p : "ended"));
+          // A call that ends without a decision is inconclusive: freeze now instead of leaving the wire in limbo until
+          // the challenge expires. Moving toward a frozen payment needs no token and is always allowed.
+          if (!decided.current && !fellBack && !cancelled.current) {
+            decided.current = true;
+            void submitDecision(ctx(startedAt, token), "freeze_payment", "INCONCLUSIVE");
+          }
         },
         onError: (message) => fallBack(`Voice agent error: ${message}. Falling back to the scripted call.`),
       });
@@ -245,7 +260,8 @@ export function CallConsole({
   // End the live session once the governor has decided.
   useEffect(() => {
     if (call && phase === "live") {
-      const t = setTimeout(() => session.current?.endSession().catch(() => undefined), 4000);
+      // The agent explains the outcome and hangs up itself (end_call); this only closes a session it left open.
+      const t = setTimeout(() => session.current?.endSession().catch(() => undefined), 15000);
       return () => clearTimeout(t);
     }
   }, [call, phase]);
