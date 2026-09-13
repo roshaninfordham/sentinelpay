@@ -30,13 +30,23 @@ export interface HttpClientOptions {
 
 interface ErrorBody { error?: { code?: unknown; message?: unknown; path?: unknown; nextActions?: unknown } }
 
+/**
+ * An error never tells an agent to pay, whatever the server sent: server-supplied PAY entries are dropped and the list
+ * always starts with DO_NOT_PAY. RETRY is kept only when the server's own list offered it.
+ */
+function safeErrorActions(raw: unknown[]): NextAction[] {
+  const kept = raw.filter((a): a is NextAction => typeof a === "object" && a !== null && typeof (a as { type?: unknown }).type === "string" && (a as { type: string }).type !== "PAY");
+  const doNotPay = kept.find((a) => a.type === "DO_NOT_PAY") ?? ({ type: "DO_NOT_PAY", reason: "UNDER_INVESTIGATION", terminal: false } as NextAction);
+  return [doNotPay, ...kept.filter((a) => a !== doNotPay)];
+}
+
 function toError(status: number, body: unknown): Error {
   const e = (body as ErrorBody | null)?.error;
   const message = typeof e?.message === "string" ? e.message : `HTTP ${status}`;
   if (e && isEngineErrorCode(e.code)) {
     return new EngineError(e.code, message, {
       ...(typeof e.path === "string" ? { path: e.path } : {}),
-      ...(Array.isArray(e.nextActions) ? { nextActions: e.nextActions as NextAction[] } : {}),
+      ...(Array.isArray(e.nextActions) ? { nextActions: safeErrorActions(e.nextActions) } : {}),
     });
   }
   const code = typeof e?.code === "string" ? e.code : "HTTP_ERROR";
