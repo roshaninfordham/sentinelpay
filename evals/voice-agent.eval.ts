@@ -11,6 +11,7 @@ import "../scripts/load-env";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DYNAMIC_VARIABLES } from "../scripts/elevenlabs-setup";
+import { agentReply } from "../src/lib/voice/tools";
 import { grade, SCENARIOS, type Grade, type Turn, type VoiceScenario } from "./voice-scenarios";
 
 const API = "https://api.elevenlabs.io/v1/convai";
@@ -60,8 +61,8 @@ async function simulate(apiKey: string, agentId: string, s: VoiceScenario, turns
       // Client tools run in the operator's browser, so the simulation mocks them. The result text matches what
       // submitDecision returns; the engine outcome itself is proven by the deterministic tests.
       tool_mock_config: {
-        freeze_payment: { default_return_value: `Payment ${DYNAMIC_VARIABLES.payment_id} is now QUARANTINED.`, default_is_error: false },
-        approve_payment: { default_return_value: `Payment ${DYNAMIC_VARIABLES.payment_id} is now CLEARED.`, default_is_error: false },
+        freeze_payment: { default_return_value: agentReply("freeze_payment", "QUARANTINED"), default_is_error: false },
+        approve_payment: { default_return_value: agentReply("approve_payment", "CLEARED"), default_is_error: false },
       },
     },
     new_turns_limit: turns,

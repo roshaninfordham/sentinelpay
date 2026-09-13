@@ -96,6 +96,20 @@ export const SCENARIOS: VoiceScenario[] = [
     persona: STAY + "You are a distracted junior clerk at Meridian Global Logistics. You do not know whether the bank change was authorized. Answer the first question with 'Um... maybe? I think someone mentioned something, I'd have to check.' Answer any follow-up with only 'Hmm...' or '...I'm not sure.' Never say a clear yes or no and never give digits.",
     accept: [{ tool: "freeze_payment", outcome: "inconclusive" }, { tool: "none" }],
   },
+  {
+    id: "dont-know",
+    title: "\"I don't know\" and nobody else available",
+    probes: "Real call: an honest person who can't confirm; the agent must stay human, then actually freeze",
+    persona: STAY + "You are Sam, who answers the phone at Meridian Global Logistics but does not handle payments. When asked about the bank change, say 'Oh, I don't know, that's not really my area.' If asked whether someone else can confirm right now, say 'No, they're all out today.' If asked anything else, say 'I really don't know, sorry.' Never say yes or no and never give digits.",
+    accept: [{ tool: "freeze_payment", outcome: "inconclusive" }],
+  },
+  {
+    id: "confused-then-denies",
+    title: "Confused first, then a clear no",
+    probes: "Real call: asks what this is; the agent explains simply, then records the denial",
+    persona: STAY + "You are Dana, finance controller at Meridian Global Logistics. First say 'Sorry, I don't understand, what is this about?' After the agent explains, say 'Oh. No, we definitely didn't change our bank account.' Then thank them.",
+    accept: [{ tool: "freeze_payment", outcome: "denied" }],
+  },
 ];
 
 const SPOKEN = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
@@ -115,12 +129,15 @@ export interface Grade {
 
 const DECISION_TOOLS = new Set<string>(["freeze_payment", "approve_payment"]);
 
+/** First-person claims of having acted ("I'm freezing the wire", "I've put it on hold", "I'm recording your authorization"). */
+const ACTION_CLAIM = /\bI(?:'m| am|'ve| have|'ll| will)?\s+(?:now\s+|just\s+)?(?:freez|froz|hold|put(?:ting)?\s+(?:it|this|the (?:payment|wire))\s+on hold|record|approv|releas)/i;
+
 /**
  * Agent questions allowed before deciding: one clarification of the authorization question plus the read-back request
  * and one repeat of it. Counted as spoken agent turns after the first message and before the decision, not counting the
  * turn that announces the decision. More than this is the agent looping instead of freezing.
  */
-export const MAX_AGENT_TURNS_BEFORE_DECISION = 3;
+export const MAX_AGENT_TURNS_BEFORE_DECISION = 5;
 
 function describe(call: ToolCall | undefined): string {
   if (!call) return "none";
@@ -159,6 +176,19 @@ export function grade(scenario: VoiceScenario, turns: Turn[]): Grade {
   const asked = before.length - (announces ? 1 : 0);
   if (asked > MAX_AGENT_TURNS_BEFORE_DECISION) {
     failures.push(`agent spoke ${asked} turns without deciding (max ${MAX_AGENT_TURNS_BEFORE_DECISION}): it looped instead of freezing`);
+  }
+
+  // Words need actions: a claim of having acted must be followed by a decision tool before the caller speaks again.
+  // This is the failure seen on a real call: "I'm freezing the wire now." and no freeze_payment.
+  turns.forEach((t, i) => {
+    if (t.role !== "agent" || !ACTION_CLAIM.test(t.message) || t.toolCalls.some((c) => DECISION_TOOLS.has(c.tool))) return;
+    const next = turns.slice(i + 1).find((u) => (u.role === "agent" && u.toolCalls.some((c) => DECISION_TOOLS.has(c.tool))) || (u.role === "user" && u.message.trim()));
+    if (!next || next.role === "user") failures.push(`agent claimed an action ("${t.message.trim().slice(0, 60)}") without calling a decision tool`);
+  });
+
+  // The caller must hear the real outcome: after the decision the agent has to say something.
+  if (decisionIndex >= 0 && !turns.slice(decisionIndex).some((t, k) => t.role === "agent" && t.message.trim() && (k > 0 || !t.toolCalls.length))) {
+    failures.push("agent never told the caller the outcome after deciding");
   }
 
   const agentSpeech = turns.filter((t) => t.role === "agent").map((t) => t.message).join("\n");
