@@ -1,21 +1,24 @@
 "use client";
 
-import { ConversationProvider } from "@elevenlabs/react";
-import { MotionConfig } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Snapshot } from "@/lib/types";
 import { CallConsole, type DemoSettings } from "./CallConsole";
 import { requestersFrom, TERMINAL_STATUS } from "./format";
 import { AuditIndicator, DemoControls, EnvironmentChip } from "./HeaderControls";
 import { LedgerPanel } from "./LedgerPanel";
 import { Queue } from "./Queue";
-import { SAVED_REASONS } from "./ResolutionShield";
+import { SAVED_REASONS } from "./FreezeStamp";
 import { Terminal } from "./Terminal";
-import { WireTicket } from "./WireTicket";
+import { WireTicket, type RailOutcome } from "./WireTicket";
 
-/** Refresh while a wire is being verified, so the investigation reads live; slower when every wire is idle. */
+/**
+ * Refresh every second while a wire is being verified, so the investigation reads live; every 5 s when every wire is
+ * idle, easing to 15 s once nothing has changed for a minute. A hidden tab does not poll, and refreshes on return.
+ */
 const POLL_ACTIVE_MS = 1000;
 const POLL_IDLE_MS = 5000;
+const POLL_QUIET_MS = 15_000;
+const QUIET_AFTER_MS = 60_000;
 /** Consecutive failed refreshes before the dashboard says the service is down (a dev reload drops one or two). */
 const FAILURES_BEFORE_ALERT = 3;
 
@@ -28,12 +31,18 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
   const [resetKey, setResetKey] = useState(0);
   const [demo, setDemo] = useState<DemoSettings>({ vendorAnswer: "deny", voiceOn: true });
 
+  // The last body received and when it last changed: an unchanged poll is not parsed and does not re-render.
+  const last = useRef({ body: "", changedAt: 0 });
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/stream", { cache: "no-store" });
       if (!res.ok) throw new Error(String(res.status));
-      setSnap(await res.json());
-      setFailures(0);
+      const body = await res.text();
+      if (body !== last.current.body) {
+        last.current = { body, changedAt: Date.now() };
+        setSnap(JSON.parse(body) as Snapshot);
+      }
+      setFailures((n) => (n === 0 ? n : 0));
     } catch {
       setFailures((n) => n + 1);
     }
@@ -41,8 +50,34 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
 
   const active = busy || snap.payments.some((p) => p.status !== "RECEIVED" && !TERMINAL_STATUS.has(p.status));
   useEffect(() => {
-    const t = setInterval(refresh, active ? POLL_ACTIVE_MS : POLL_IDLE_MS);
-    return () => clearInterval(t);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    const delay = () => {
+      if (active) return POLL_ACTIVE_MS;
+      const quiet = last.current.changedAt > 0 && Date.now() - last.current.changedAt > QUIET_AFTER_MS;
+      return quiet ? POLL_QUIET_MS : POLL_IDLE_MS;
+    };
+    // A chained timeout, so a slow response never stacks requests behind it.
+    const schedule = () => {
+      clearTimeout(timer);
+      if (stopped || document.visibilityState === "hidden") return;
+      timer = setTimeout(async () => {
+        await refresh();
+        schedule();
+      }, delay());
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return clearTimeout(timer);
+      refresh().then(schedule);
+    };
+    if (!last.current.changedAt) last.current.changedAt = Date.now();
+    schedule();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [refresh, active]);
 
   const release = async (paymentId: string) => {
@@ -85,6 +120,16 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
     return out;
   }, [snap.ledger]);
   const frozenReason = payment ? frozenReasons[payment.id] : undefined;
+  // What the payment rail did after a release: the wire reference it returned, or why it created no wire.
+  const railOutcome = useMemo(() => {
+    const out: Record<string, RailOutcome> = {};
+    for (const e of snap.ledger) {
+      const p = (e.payload ?? {}) as { reference?: string; status?: string; error?: string };
+      if (e.event === "RAIL_RELEASED") out[e.paymentId] = { reference: p.reference, status: p.status };
+      else if (e.event === "RAIL_ERROR") out[e.paymentId] = { error: p.error ?? "the rail did not confirm the wire" };
+    }
+    return out;
+  }, [snap.ledger]);
   const challenge = payment ? snap.challenges[payment.id] : undefined;
   // Only a vendor's refusal counts as protected; an operator freeze or an expiry holds money that may be legitimate.
   const protectedCents = snap.payments
@@ -93,13 +138,13 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
   const unavailable = failures >= FAILURES_BEFORE_ALERT;
 
   return (
-    <MotionConfig reducedMotion="user">
+    <>
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 pb-8 md:px-6">
         <header className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-rule py-4">
           <div className="flex items-center gap-3">
             <ShieldGlyph />
             <h1 className="font-display text-2xl font-semibold tracking-tight">SentinelPay</h1>
-            <p className="hidden text-sm text-muted xl:block">Pre-settlement verification for outgoing wires</p>
+            <p className="hidden text-sm text-muted min-[1600px]:block">Pre-settlement verification for outgoing wires</p>
           </div>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 min-[900px]:ml-auto">
             <span className="text-sm text-muted">
@@ -109,6 +154,9 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
               </span>
             </span>
             <AuditIndicator chain={snap.chain} entries={snap.ledger.length} />
+            <a href="/agents" className="no-print text-sm text-muted underline decoration-rule underline-offset-4 transition-colors hover:text-paper hover:decoration-muted">
+              Connect an agent
+            </a>
             <div className="no-print flex flex-wrap items-center gap-2">
               <EnvironmentChip snap={snap} />
               {snap.environment !== "production" && <DemoControls settings={demo} onChange={setDemo} onReset={reset} busy={busy} />}
@@ -151,6 +199,7 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
                     assurance: challenge?.assurance,
                     scripted: challenge?.channel === "voice_browser" && snap.voiceAgent === "scripted",
                   }}
+                  rail={{ name: snap.rail.name, ...(payment.railReference ? { reference: payment.railReference } : {}), ...railOutcome[payment.id] }}
                   busy={busy}
                   onRelease={() => release(payment.id)}
                 />
@@ -168,28 +217,26 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
           </section>
 
           <section aria-label="Investigation and vendor confirmation" className="flex min-w-0 flex-col gap-4 min-[900px]:col-start-2 min-[1200px]:col-start-3">
-            <Terminal lines={lines} />
+            <Terminal lines={lines} evidence={snap.demoMode === "cache" ? "Recorded fixtures" : "Live RDAP and Tavily"} />
             {payment && vendor && (
-              <ConversationProvider>
-                <CallConsole
-                  key={`${payment.id}-${resetKey}`}
-                  payment={payment}
-                  vendor={vendor}
-                  assessment={assessment}
-                  call={call}
-                  challenge={challenge}
-                  demo={demo}
-                  environment={snap.environment}
-                  voiceAgent={snap.voiceAgent}
-                  frozenReason={frozenReason}
-                  onDecided={refresh}
-                />
-              </ConversationProvider>
+            <CallConsole
+                key={`${payment.id}-${resetKey}`}
+                payment={payment}
+                vendor={vendor}
+                assessment={assessment}
+                call={call}
+                challenge={challenge}
+                demo={demo}
+                environment={snap.environment}
+                voiceAgent={snap.voiceAgent}
+                frozenReason={frozenReason}
+                onDecided={refresh}
+              />
             )}
           </section>
         </main>
       </div>
-    </MotionConfig>
+    </>
   );
 }
 
