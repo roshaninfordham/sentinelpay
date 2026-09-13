@@ -34,7 +34,7 @@ export function seedPayments(now = Date.now()): Payment[] {
       invoiceContactPhone: "+1-000-000-0000",    // attacker's footer number — never trusted
       status: "RECEIVED",
       createdAt: iso(14),
-      memo: "INV-88412 · Q3 ocean freight · \"URGENT: updated remittance details\"",
+      memo: "INV-88412 - Q3 ocean freight - \"URGENT: updated remittance details\"",
     },
     {
       id: "pay_18k",
@@ -46,7 +46,7 @@ export function seedPayments(now = Date.now()): Payment[] {
       invoiceContactPhone: "+1-206-555-0143",
       status: "RECEIVED",
       createdAt: iso(41),
-      memo: "INV-20931 · drayage, Port of Seattle",
+      memo: "INV-20931 - drayage, Port of Seattle",
     },
   ];
 }
