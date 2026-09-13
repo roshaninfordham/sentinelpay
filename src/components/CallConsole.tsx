@@ -1,11 +1,11 @@
 "use client";
 
-import { useConversation } from "@elevenlabs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CallOutcome, ChallengeView, Payment, RiskAssessment, Snapshot, Vendor } from "@/lib/types";
 import { challengeScript, type ScriptLine } from "@/lib/voice/script";
 import { createClientTools, submitDecision, type DecisionContext } from "@/lib/voice/tools";
 import { Countdown } from "./Countdown";
+import { loadVoiceSdk, type LiveSession } from "./live-voice";
 import { expiryTime, possessive, shortName, TERMINAL_STATUS, writtenDigits } from "./format";
 import { Waveform } from "./Waveform";
 
@@ -29,7 +29,7 @@ interface TokenResponse {
 }
 
 const CHANNEL_LABEL: Record<string, string> = {
-  voice_browser: "browser voice call",
+  voice_browser: "live voice agent",
   voice_phone: "phone call",
   human_approval: "approval link",
   scripted: "scripted call",
@@ -69,7 +69,8 @@ export function CallConsole({
   frozenReason?: string;
   onDecided: () => void;
 }) {
-  const conversation = useConversation();
+  // The live voice session, created from the lazily loaded SDK. Null on the scripted call.
+  const session = useRef<LiveSession | null>(null);
   const [phase, setPhase] = useState<Phase>(call ? "ended" : "idle");
   const [lines, setLines] = useState<Line[]>(() => (call?.transcript ? parseTranscript(call.transcript) : []));
   const [speaking, setSpeaking] = useState<"agent" | "vendor" | null>(null);
@@ -171,9 +172,23 @@ export function CallConsole({
       return runSimulated(token);
     }
 
+    // Falls back to the scripted call at most once, whether the SDK fails to load, the session fails to start, or
+    // the live session errors mid-call.
+    let fellBack = false;
+    const fallBack = (note: string) => {
+      if (fellBack || cancelled.current) return;
+      fellBack = true;
+      session.current?.endSession().catch(() => undefined);
+      session.current = null;
+      setNote(note);
+      runSimulated(token);
+    };
+
     try {
+      const VoiceConversation = await loadVoiceSdk();
+      if (cancelled.current) return;
       const startedAt = Date.now();
-      conversation.startSession({
+      const live = await VoiceConversation.startSession({
         conversationToken: token.conversationToken,
         connectionType: "webrtc",
         dynamicVariables: token.dynamicVariables,
@@ -181,17 +196,23 @@ export function CallConsole({
         onConnect: () => setPhase("live"),
         onMessage: ({ message, role }) => push({ speaker: role === "agent" ? "agent" : "vendor", text: message }),
         onModeChange: ({ mode }) => setSpeaking(mode === "speaking" ? "agent" : null),
-        onDisconnect: () => setPhase("ended"),
-        onError: (message) => {
-          setNote(`Voice agent error: ${message}. Falling back to the scripted call.`);
-          runSimulated(token);
+        onDisconnect: () => {
+          session.current = null;
+          setSpeaking(null);
+          setPhase((p) => (p === "simulated" ? p : "ended"));
         },
+        onError: (message) => fallBack(`Voice agent error: ${message}. Falling back to the scripted call.`),
       });
+      // Unmounted or frozen while connecting: hang up rather than leave a session open.
+      if (cancelled.current || fellBack) {
+        live.endSession().catch(() => undefined);
+        return;
+      }
+      session.current = live;
     } catch (err) {
-      setNote(`Voice agent failed to start (${(err as Error).message}). Falling back to the scripted call.`);
-      runSimulated(token);
+      fallBack(`Voice agent failed to start (${(err as Error).message}). Falling back to the scripted call.`);
     }
-  }, [conversation, ctx, environment, payment.id, push, runSimulated]);
+  }, [ctx, environment, payment.id, push, runSimulated]);
 
   const open = payment.status === "CHALLENGING" && challenge?.status === "OPEN";
   const voiceChallengeOpen = open && challenge?.channel === "voice_browser";
@@ -214,25 +235,34 @@ export function CallConsole({
       body: JSON.stringify({ paymentId: payment.id }),
     }).catch(() => null);
     if (!res?.ok) setNote("Freeze request failed. The payment stays held; try again.");
-    if (conversation.status === "connected") conversation.endSession();
+    session.current?.endSession().catch(() => undefined);
+    session.current = null;
     setPhase((p) => (p === "simulated" || p === "live" || p === "connecting" ? "ended" : p));
     setFreezing(false);
     onDecided();
-  }, [conversation, onDecided, payment.id]);
+  }, [onDecided, payment.id]);
 
   // End the live session once the governor has decided.
   useEffect(() => {
-    if (call && conversation.status === "connected") {
-      const t = setTimeout(() => conversation.endSession(), 4000);
+    if (call && phase === "live") {
+      const t = setTimeout(() => session.current?.endSession().catch(() => undefined), 4000);
       return () => clearTimeout(t);
     }
-  }, [call, conversation]);
+  }, [call, phase]);
+
+  // Warm the SDK while forensics runs, so the live call starts without a fetch at the moment it dials.
+  const verifying = payment.status === "PENDING_REVIEW" || payment.status === "INVESTIGATING" || payment.status === "CHALLENGING";
+  useEffect(() => {
+    if (voiceAgent === "elevenlabs" && verifying && !call) loadVoiceSdk().catch(() => undefined);
+  }, [voiceAgent, verifying, call]);
 
   useEffect(() => {
     cancelled.current = false; // StrictMode remounts: re-arm after the simulated unmount
     return () => {
       cancelled.current = true;
       window.speechSynthesis?.cancel();
+      session.current?.endSession().catch(() => undefined);
+      session.current = null;
     };
   }, []);
 
@@ -338,7 +368,7 @@ export function CallConsole({
               <Waveform
                 active={onLine}
                 speaker={speaking}
-                sample={phase === "live" ? () => (speaking === "agent" ? conversation.getOutputByteFrequencyData() : conversation.getInputByteFrequencyData()) : undefined}
+                sample={phase === "live" ? () => (speaking === "agent" ? session.current?.getOutputByteFrequencyData() : session.current?.getInputByteFrequencyData()) : undefined}
               />
             </div>
           )}

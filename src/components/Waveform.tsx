@@ -15,12 +15,15 @@ export function Waveform({
 }: {
   active: boolean;
   speaker: "agent" | "vendor" | null;
-  sample?: () => Uint8Array;
+  sample?: () => Uint8Array | undefined;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const state = useRef({ speaker, sample, active });
+  /** Restarts the draw loop; set by the effect below. The loop parks itself once idle bars have settled. */
+  const wake = useRef<() => void>(() => undefined);
   useEffect(() => {
     state.current = { speaker, sample, active };
+    wake.current();
   }, [speaker, sample, active]);
 
   useEffect(() => {
@@ -30,6 +33,7 @@ export function Waveform({
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const levels = new Float32Array(BARS);
     let raf = 0;
+    let parked = false;
 
     const draw = (t: number) => {
       const { speaker: who, sample: read, active: on } = state.current;
@@ -57,6 +61,11 @@ export function Waveform({
         levels[i] += (Math.abs(target) - levels[i]) * 0.25;
       }
 
+      // Nothing on the line and the bars are flat: stop drawing until the call state changes.
+      if (!on && levels.every((l) => Math.abs(l - 0.04) < 0.002)) {
+        parked = true;
+      }
+
       const gap = 3;
       const bw = (w - gap * (BARS - 1)) / BARS;
       g.fillStyle = who === "vendor" ? "#e4ecf1" : on ? "#d6a23e" : "#233747";
@@ -64,10 +73,21 @@ export function Waveform({
         const bh = Math.max(2, levels[i] * h);
         g.fillRect(i * (bw + gap), (h - bh) / 2, bw, bh);
       }
+      if (!parked) raf = requestAnimationFrame(draw);
+    };
+    wake.current = () => {
+      if (!parked) return;
+      parked = false;
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
+    const onResize = () => wake.current();
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      cancelAnimationFrame(raf);
+      wake.current = () => undefined;
+    };
   }, []);
 
   return <canvas ref={canvas} className="my-3 h-14 w-full" aria-hidden />;
