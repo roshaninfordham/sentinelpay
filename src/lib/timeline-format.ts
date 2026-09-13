@@ -26,9 +26,16 @@ export interface FormatContext {
 
 export const usd = (cents: number) => (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
+/** "••4471" for a bare last 4; the rail's unreadable beneficiary and "4471 at routing ••0013" read as written. */
+export function accountLabel(value: string): string {
+  if (/^\d{4}$/.test(value)) return `••${value}`;
+  if (value === "unknown") return "an account the rail could not read";
+  return value.replace(/^(\d{4}) at /, "••$1 at ");
+}
+
 export function describeMismatch(m: Mismatch): string {
   return m.code === "BENEFICIARY_CHANGED"
-    ? `Beneficiary changed: ••${m.onFile} → ••${m.claimed}`
+    ? `Beneficiary changed: ${accountLabel(m.onFile)} → ${accountLabel(m.claimed)}`
     : `Request domain ${m.claimed} ≠ vendor of record ${m.onFile}`;
 }
 
