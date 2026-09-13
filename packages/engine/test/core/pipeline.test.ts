@@ -106,6 +106,38 @@ test("rail release failure keeps PAY with RETRY; re-verify retries only the rele
   assert.deepEqual(await eventsOf(storage), ["CLEARED", "RAIL_ERROR", "RAIL_RELEASED"]);
 });
 
+test("retryRelease retries a failed rail release once with the same key, and is a no-op otherwise", async () => {
+  const storage = memoryStorage();
+  const rail = spyRail(() => storage.ledger(), "4471");
+  rail.failNextRelease();
+  const s = setup({ storage, rail });
+  assert.equal((await s.engine.verify(clean())).rail.status, "FAILED");
+
+  const retried = await s.engine.retryRelease("pay_18k");
+  assert.deepEqual([retried.decision, retried.rail.status, retried.rail.reference], ["PAY", "RELEASED", "wire_2"]);
+  assert.deepEqual(rail.releases.map((r) => r.idempotencyKey), ["payfirewall-pay_18k", "payfirewall-pay_18k"]);
+
+  // Already released: nothing is sent again.
+  await s.engine.retryRelease("pay_18k");
+  assert.equal(rail.releases.length, 2);
+  assert.deepEqual(await eventsOf(storage), ["CLEARED", "RAIL_ERROR", "RAIL_RELEASED"]);
+});
+
+test("retryRelease never releases after beneficiary drift", async () => {
+  const storage = memoryStorage();
+  const rail = spyRail(() => storage.ledger(), "4471");
+  const s = setup({ storage, rail });
+  rail.setBeneficiary("4471");
+  const read = rail.readBeneficiary.bind(rail);
+  let reads = 0;
+  rail.readBeneficiary = async (p) => (++reads === 1 ? read(p) : { accountLast4: "0000" });
+  const v = await s.engine.verify(clean());
+  assert.deepEqual([v.decision, v.reason], ["DO_NOT_PAY", "RAIL_BENEFICIARY_DRIFT"]);
+  const after = await s.engine.retryRelease("pay_18k");
+  assert.deepEqual([after.decision, after.reason], ["DO_NOT_PAY", "RAIL_BENEFICIARY_DRIFT"]);
+  assert.equal(rail.releases.length, 0);
+});
+
 test("scripted challenger resolves inside advance", async () => {
   const { engine, storage } = setup({ challengers: [scriptedChallenger("DENIED")] });
   await engine.verify(poisoned());

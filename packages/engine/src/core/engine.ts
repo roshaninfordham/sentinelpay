@@ -738,6 +738,14 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
       return inContext({ paymentId }, async () => view(await step(paymentId)));
     },
 
+    async retryRelease(rawId) {
+      const paymentId = validatePaymentId(rawId);
+      return inContext({ paymentId }, async () => {
+        await settle(paymentId, { retryFailed: true });
+        return view(await mustLoad({ paymentId }));
+      });
+    },
+
     async sweep(opts = {}) {
       const open = await storage.list({ states: ["PENDING_REVIEW", "INVESTIGATING", "CHALLENGING"], limit: opts.limit });
       let advanced = 0;

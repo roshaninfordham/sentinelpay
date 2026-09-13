@@ -133,6 +133,8 @@ export interface PayFirewall {
 
 export interface Engine extends PayFirewall {
   advance(paymentId: string): Promise<Verification>;
+  /** Retries the rail release of a CLEARED payment whose release FAILED, with the same idempotency key. A no-op otherwise; never after beneficiary drift. */
+  retryRelease(paymentId: string): Promise<Verification>;
   sweep(opts?: { limit?: number }): Promise<{ advanced: number; expired: number }>;
   resolveChallenge(input: ResolveChallengeInput): Promise<Verification>;
   verifyLedger(): Promise<{ ok: boolean; brokenAt?: number; length: number }>;
