@@ -39,6 +39,23 @@ export function readBackDigits(value: unknown): string {
   return digits.length === 4 ? digits : "";
 }
 
+/**
+ * What the voice agent hears back after a tool call. It always states the real outcome and what to tell the caller, so
+ * the agent never has to guess (the prompt tells it to relay the RESULT). It never contains account digits or tokens.
+ */
+export function agentReply(tool: ToolName, status: string | undefined, rejected?: boolean): string {
+  if (rejected || !status) {
+    return "RESULT: NOT RECORDED. The decision could not be saved, so the payment stays on hold and no money moves. Tell the caller the payment is on hold and their usual contact will follow up, thank them, and end the call.";
+  }
+  if (status === "CLEARED") {
+    return "RESULT: CONFIRMED. Their confirmation and the digits they read matched this request. Tell the caller their confirmation is recorded and the payment can go ahead, thank them, and end the call.";
+  }
+  if (tool === "approve_payment") {
+    return "RESULT: NOT CONFIRMED. What they read back did not match this request, so the payment stays on hold for their protection. Tell the caller it is on hold and their usual contact will follow up. Do not mention or discuss any digits. Thank them and end the call.";
+  }
+  return "RESULT: ON HOLD. The payment is frozen and no money will move. Tell the caller that plainly, thank them for helping keep the payment safe, and end the call.";
+}
+
 export async function submitDecision(ctx: DecisionContext, tool: ToolName, verdict: Verdict, readBack?: unknown): Promise<string> {
   const digits = readBackDigits(readBack);
   const res = await fetch("/api/governor/decide", {
@@ -55,9 +72,9 @@ export async function submitDecision(ctx: DecisionContext, tool: ToolName, verdi
     }),
   });
   const body = (await res.json().catch(() => ({}))) as { error?: string; payment?: { status: string } };
-  if (!res.ok) return `Governor rejected the decision: ${body.error ?? res.status}`;
+  if (!res.ok) return agentReply(tool, undefined, true);
   ctx.onDecided?.(tool, verdict);
-  return `Payment ${ctx.paymentId} is now ${body.payment?.status}.`;
+  return agentReply(tool, body.payment?.status);
 }
 
 /**

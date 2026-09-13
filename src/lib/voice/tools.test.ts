@@ -67,7 +67,7 @@ const approve = (t: Tools, p: AnyParams<Tools["approve_payment"]>) => t.approve_
 test("freeze_payment outcome 'denied' quarantines as VENDOR_DENIED_CHANGE and never sends the responder token", async () => {
   const call = await openCall();
   const reply = await freeze(call.tools, { outcome: "denied", reason: "controller says fraud" });
-  assert.match(reply, /QUARANTINED/);
+  assert.match(reply, /^RESULT: ON HOLD/);
   assert.deepEqual(await call.state(), { state: "QUARANTINED", reason: "VENDOR_DENIED_CHANGE" });
   assert.equal(call.sent[0].body.verdict, "DENIED");
   assert.equal("responderToken" in call.sent[0].body, false);
@@ -95,7 +95,7 @@ test("approve_payment with the vendor's matching read-back clears (numerals or s
   for (const readBack of [NEW_LAST4, "nine eight two one", "9 8 2 1"]) {
     const call = await openCall();
     const reply = await approve(call.tools, { last4_read_back: readBack });
-    assert.match(reply, /CLEARED/, readBack);
+    assert.match(reply, /^RESULT: CONFIRMED/, readBack);
     assert.equal((await call.state()).state, "CLEARED", readBack);
     assert.equal(call.sent[0].body.beneficiaryLast4ReadBack, NEW_LAST4);
     assert.deepEqual(call.decided, [["approve_payment", "AUTHORIZED"]]);
@@ -105,8 +105,11 @@ test("approve_payment with the vendor's matching read-back clears (numerals or s
 test("approve_payment with a wrong read-back freezes: the engine denies the mismatch", async () => {
   for (const readBack of ["5530", "4471", "0000"]) {
     const call = await openCall();
-    await approve(call.tools, { last4_read_back: readBack });
+    const reply = await approve(call.tools, { last4_read_back: readBack });
     assert.deepEqual(await call.state(), { state: "QUARANTINED", reason: "VENDOR_DENIED_CHANGE" }, readBack);
+    // The agent is told the truth (not confirmed) and is never given any digits to repeat.
+    assert.match(reply, /^RESULT: NOT CONFIRMED/, readBack);
+    assert.doesNotMatch(reply, /\d/, readBack);
   }
 });
 
@@ -126,7 +129,7 @@ test("approve_payment with a missing or unusable read-back freezes (no read-back
 test("approve_payment without the responder token is refused and never clears; the payment stays held", async () => {
   const call = await openCall({ token: () => "" });
   const reply = await approve(call.tools, { last4_read_back: NEW_LAST4 });
-  assert.match(reply, /Governor rejected the decision/);
+  assert.match(reply, /^RESULT: NOT RECORDED/);
   assert.equal(call.sent[0].status, 403);
   assert.deepEqual(call.decided, []);
   assert.equal((await call.state()).state, "CHALLENGING");
@@ -151,7 +154,7 @@ test("approve_payment after freeze_payment cannot clear: the first decision is f
   const call = await openCall();
   await freeze(call.tools, { outcome: "denied" });
   const reply = await approve(call.tools, { last4_read_back: NEW_LAST4 });
-  assert.match(reply, /QUARANTINED/);
+  assert.match(reply, /^RESULT: NOT CONFIRMED/);
   assert.deepEqual(await call.state(), { state: "QUARANTINED", reason: "VENDOR_DENIED_CHANGE" });
 });
 
@@ -186,7 +189,8 @@ test("the agent is never given the new account digits or the responder token", a
   assert.equal(agentOverrides.first_message, false);
   assert.deepEqual(Object.values(agentOverrides.prompt), [false, false, false, false, false]);
   assert.equal(body.platform_settings.auth.enable_auth, true);
-  assert.equal(body.conversation_config.agent.prompt.temperature, 0);
+  // Low but not zero: natural phrasing. Safety never depends on sampling; the engine gates decide.
+  assert.ok(body.conversation_config.agent.prompt.temperature <= 0.3);
 });
 
 test("readBackDigits accepts exactly four spoken or written digits and nothing else", async () => {
