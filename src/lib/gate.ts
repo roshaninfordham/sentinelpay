@@ -38,6 +38,8 @@ export async function runGate(paymentId: string): Promise<GateResult> {
   // An existing case is never re-submitted: the payments row now mirrors the rail's beneficiary, so a second
   // verify would look like a changed request (409). The case already holds the gate's answer.
   const existing = await loadCase({ paymentId });
+  // Releasing again is how an operator retries a wire the rail refused; the engine reuses the same idempotency key.
+  if (existing?.state === "CLEARED" && existing.rail.status === "FAILED") return toGateResult(await engine.retryRelease(paymentId));
   if (existing) return toGateResult(existing);
 
   const payment = await paymentSource().get(paymentId);

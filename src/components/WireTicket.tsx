@@ -78,7 +78,9 @@ export function WireTicket({
   // A clean payment released straight through the gate skips the middle stages.
   const straightThrough = cleared && !assessment;
   const done = completed(payment.status, !!assessment);
-  const actionable = payment.status === "RECEIVED" && !busy;
+  // The rail refused the wire after the release was decided: the operator can send it again through the engine.
+  const railFailed = payment.status === "CLEARED" && !!rail.error && !rail.reference;
+  const actionable = (payment.status === "RECEIVED" || railFailed) && !busy;
 
   // The stamp overlays the ticket only when the freeze happens on screen; a wire that was already frozen when
   // selected shows the band, so its facts stay readable. Adjusted during render when the payment or status changes.
@@ -242,7 +244,9 @@ export function WireTicket({
                       : `cursor-default border ${frozen ? "border-signal/60 text-signal" : cleared ? "border-cleared/60 text-cleared" : "border-brass/60 text-brass"}`
                 }`}
               >
-                {payment.status === "RECEIVED" ? (busy ? "Verifying…" : PRIMARY_LABEL.RECEIVED) : PRIMARY_LABEL[payment.status]}
+                {railFailed
+                  ? busy ? "Retrying…" : "Retry release"
+                  : payment.status === "RECEIVED" ? (busy ? "Verifying…" : PRIMARY_LABEL.RECEIVED) : PRIMARY_LABEL[payment.status]}
               </button>
             </div>
           </div>
