@@ -2,19 +2,20 @@
 // It drives the exact same client tool → /api/governor/decide path as the live agent.
 
 export type Speaker = "agent" | "vendor";
-export interface ScriptLine { speaker: Speaker; text: string }
+/** `text` is what the transcript shows; `spoken`, when present, is what browser speech says instead. */
+export interface ScriptLine { speaker: Speaker; text: string; spoken?: string }
 
 export interface ScriptVars {
   amount: string;
   vendor: string;
-  newLast4: string;
   payer: string;
 }
 
-export function challengeScript(v: ScriptVars, vendorAnswer: "deny" | "authorize"): ScriptLine[] {
+// The agent never says the new account's digits: if the vendor confirms, the vendor reads them back.
+export function challengeScript(v: ScriptVars, vendorAnswer: "deny" | "authorize", beneficiaryLast4: string): ScriptLine[] {
   const opening: ScriptLine = {
     speaker: "agent",
-    text: `Hello, this is the SentinelPay settlement desk calling on behalf of ${v.payer}. We have a pending ${v.amount} wire to ${v.vendor}, and we received a request to change your bank routing to an account ending ${v.newLast4.split("").join(" ")}. Did your treasury team authorize this change?`,
+    text: `Hello, this is the SentinelPay settlement desk calling on behalf of ${v.payer}. We have a pending ${v.amount} wire to ${v.vendor}, and we received a request to change the bank account it is paid to. Did your treasury team authorize this change?`,
   };
   if (vendorAnswer === "deny") {
     return [
@@ -25,7 +26,9 @@ export function challengeScript(v: ScriptVars, vendorAnswer: "deny" | "authorize
   }
   return [
     opening,
-    { speaker: "vendor", text: "Yes. We moved banks last month; the account ending in those digits is ours." },
-    { speaker: "agent", text: "Thank you for confirming. I'm releasing the payment and recording your authorization." },
+    { speaker: "vendor", text: "Yes. We moved banks last month." },
+    { speaker: "agent", text: "Thank you. Please read me the last four digits of the new account." },
+    { speaker: "vendor", text: `It ends in ${beneficiaryLast4}.`, spoken: `It ends in ${beneficiaryLast4.split("").join(" ")}.` },
+    { speaker: "agent", text: "Thank you for confirming. I'm recording your authorization for release." },
   ];
 }

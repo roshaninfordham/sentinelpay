@@ -25,6 +25,20 @@ export const FORBIDDEN_BODY_FIELDS = ["principal", "requestedBy", "resolvedBy"] 
 
 export const isEngineErrorCode = (v: unknown): v is EngineErrorCode => ERROR_CODES.includes(v as EngineErrorCode);
 
+/**
+ * A fixed, operator-actionable message for a remote client's transport failure (PayFirewallHttpError, matched by
+ * shape because tools must not import the HTTP client). Anything else keeps the generic outage message.
+ */
+function transportMessage(err: unknown): string {
+  const t = err as { name?: unknown; status?: unknown; code?: unknown } | null;
+  if (t?.name !== "PayFirewallHttpError" || typeof t.status !== "number" || typeof t.code !== "string") return "verification service unavailable";
+  if (t.code === "UNAUTHORIZED" || t.status === 401 || t.status === 403) return `the PayFirewall API key was rejected (HTTP ${t.status})`;
+  if (t.code === "NETWORK_ERROR") return "could not reach the PayFirewall service; check its URL";
+  if (t.code === "INVALID_RESPONSE") return "the PayFirewall service answered with a body that is not JSON; check its URL";
+  if (t.status === 404) return "no PayFirewall API answered at this URL (HTTP 404); check the base URL";
+  return `verification service unavailable (HTTP ${t.status})`;
+}
+
 /** Error contract (§5.2). Anything that is not a coded engine error is reported as a retryable outage, never as success. */
 export function toToolError(err: unknown): ToolError {
   const e = err as Partial<EngineError> | null;
@@ -44,7 +58,7 @@ export function toToolError(err: unknown): ToolError {
   // (false for a rejected API key) is kept so an agent does not retry forever.
   return {
     code: "STORAGE_UNAVAILABLE",
-    message: "verification service unavailable",
+    message: transportMessage(err),
     retryable: typeof e?.retryable === "boolean" ? e.retryable : true,
     nextActions: [{ type: "DO_NOT_PAY", reason: "STORAGE_UNAVAILABLE", terminal: false }],
   };

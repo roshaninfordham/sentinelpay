@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Verification } from "payfirewall";
-import { resolveLaunch, UsageError } from "../src/config";
+import { reportingFetch, resolveLaunch, UsageError } from "../src/config";
 
 const BIN = fileURLToPath(new URL("../src/bin.ts", import.meta.url));
 const EMBEDDED_CONFIG = fileURLToPath(new URL("./fixtures/payfirewall.config.ts", import.meta.url));
@@ -66,4 +66,21 @@ test("embedded mode over stdio: verify then block reaches DO_NOT_PAY", async (t)
   const b = blocked.structuredContent as unknown as Verification;
   assert.deepEqual([b.decision, b.reason, b.terminal], ["DO_NOT_PAY", "BLOCKED_BY_PRINCIPAL", true]);
   assert.equal((blocked.content as Array<{ text: string }>)[0].text, "decision=DO_NOT_PAY reason=BLOCKED_BY_PRINCIPAL next=DO_NOT_PAY");
+});
+
+test("remote mode reports a rejected API key or an unreachable URL once on stderr (DX-3)", async () => {
+  const lines: string[] = [];
+  let status = 401;
+  const fetch = reportingFetch((m) => lines.push(m), async () => {
+    if (status === 0) throw new TypeError("fetch failed");
+    return new Response("{}", { status });
+  });
+  assert.equal((await fetch("https://x/api/v1/verifications")).status, 401);
+  await fetch("https://x/api/v1/verifications");
+  status = 200;
+  await fetch("https://x/api/v1/verifications");
+  status = 0;
+  await assert.rejects(fetch("https://x/api/v1/verifications"), /fetch failed/);
+  await assert.rejects(fetch("https://x/api/v1/verifications"), /fetch failed/);
+  assert.deepEqual(lines, ["PAYFIREWALL_API_KEY was rejected (HTTP 401)", "could not reach PAYFIREWALL_URL: fetch failed"]);
 });

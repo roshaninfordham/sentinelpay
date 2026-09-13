@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { columnRail } from "../../src/adapters/column";
 import { memoryStorage } from "../../src/adapters/memory";
 import { ConfigError, type Rail } from "../../src/core/types";
-import { clean, eventsOf, poisoned, setup } from "../core/helpers";
+import { fingerprintAccount } from "../../src/core/hash";
+import { FP_KEY, MERIDIAN, PEPPER, clean, eventsOf, poisoned, setup } from "../core/helpers";
 import { stubFetch, type RecordedCall } from "./stub-fetch";
 
 const KEY = "test_sandbox_key" as const;
@@ -29,16 +30,67 @@ test("columnRail refuses non-test_ keys with ConfigError", () => {
   assert.equal(columnRail({ apiKey: KEY, bankAccountId: "bacc_ap", counterparties: {} }).environment, "sandbox");
 });
 
-test("readBeneficiary reads last4 from the mapped counterparty; the payment's own counterparty id wins", async () => {
-  const { fetch, calls } = columnStub({ cpty_attacker: "770001939821", cpty_other: "111122223333" });
+test("readBeneficiary reads last4 from the host-mapped counterparty; a caller's railCounterpartyId never picks it", async () => {
+  const { fetch, calls } = columnStub({ cpty_attacker: "770001939821", cpty_other: "111122223333", cpty_meridian: "500045104471" });
   const r = rail(fetch);
   assert.deepEqual(await r.readBeneficiary!(poisoned({ beneficiary: { accountLast4: "4471" } })), { accountLast4: "9821" });
   assert.equal(calls[0].url, "https://api.column.com/counterparties/cpty_attacker");
   assert.equal(calls[0].method, "GET");
   assert.equal(calls[0].headers.Authorization, `Basic ${btoa(`:${KEY}`)}`);
-  assert.deepEqual(await r.readBeneficiary!(poisoned({ beneficiary: { accountLast4: "4471", railCounterpartyId: "cpty_other" } })), { accountLast4: "3333" });
+  // Agreeing with the mapping is allowed; disagreeing with it, or naming one where the host mapped none, is refused.
+  assert.deepEqual(await r.readBeneficiary!(poisoned({ beneficiary: { accountLast4: "4471", railCounterpartyId: "cpty_attacker" } })), { accountLast4: "9821" });
+  await assert.rejects(r.readBeneficiary!(poisoned({ beneficiary: { accountLast4: "4471", railCounterpartyId: "cpty_other" } })), /does not match/);
+  await assert.rejects(r.readBeneficiary!(clean({ id: "pay_unmapped", beneficiary: { accountLast4: "3333", railCounterpartyId: "cpty_other" } })), /no Column counterparty/);
   await assert.rejects(r.readBeneficiary!(clean({ id: "pay_unmapped" })), /no Column counterparty/);
   await assert.rejects(r.readBeneficiary!(clean({ id: "pay_18k" })), /404/);
+  assert.ok(!calls.some((c) => c.url.endsWith("/cpty_other")), "the caller's counterparty was read");
+
+  const byVendor = columnRail({ apiKey: KEY, bankAccountId: "bacc_ap", counterparties: {}, vendorCounterparties: { v_meridian: "cpty_meridian" }, fetch });
+  assert.deepEqual(await byVendor.readBeneficiary!(clean({ id: "pay_new" })), { accountLast4: "4471" });
+});
+
+test("readBeneficiary with fingerprintKey returns HMAC(routing|account) of the counterparty", async () => {
+  const { fetch } = columnStub({ cpty_northwind: "500045104471" });
+  const r = columnRail({ apiKey: KEY, bankAccountId: "bacc_ap", counterparties: COUNTERPARTIES, fingerprintKey: FP_KEY, fetch });
+  assert.deepEqual(await r.readBeneficiary!(clean()), {
+    accountLast4: "4471", accountFingerprint: await fingerprintAccount(FP_KEY, "121000248", "500045104471"),
+  });
+});
+
+test("engine + columnRail: a requester's railCounterpartyId cannot route a wire to another account (SEC-01)", async () => {
+  // cpty_attacker ends in the vendor's on-file 4471; only cpty_meridian is the vendor's real account.
+  const { fetch, calls } = columnStub({ cpty_attacker: "987654324471", cpty_meridian: "500045104471" });
+  const column = columnRail({ apiKey: KEY, bankAccountId: "bacc_ap", counterparties: {}, vendorCounterparties: { v_meridian: "cpty_meridian" }, fetch });
+  const { engine } = setup({ environment: "sandbox", rail: column });
+  const v = await engine.verify(clean({ id: "pay_x", beneficiary: { accountLast4: "4471", railCounterpartyId: "cpty_attacker" } }));
+  assert.notEqual(v.decision, "PAY");
+  assert.equal(v.state, "PENDING_REVIEW");
+  assert.deepEqual(v.mismatches[0], { code: "BENEFICIARY_CHANGED", onFile: "4471", claimed: "unknown" });
+  assert.equal(wires(calls).length, 0);
+
+  // Without the caller's id, the vendor's own counterparty is read and paid.
+  const ok = await engine.verify(clean({ id: "pay_y" }));
+  assert.equal(ok.state, "CLEARED");
+  assert.equal((await engine.get("pay_y")).rail.status, "RELEASED");
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(wires(calls)[0].body)).counterparty_id, "cpty_meridian");
+});
+
+test("engine + columnRail: a host-mapped counterparty whose last4 collides is caught by the account fingerprint", async () => {
+  const { fetch, calls } = columnStub({ cpty_attacker: "987654324471", cpty_northwind: "500045104471" });
+  const column = columnRail({ apiKey: KEY, bankAccountId: "bacc_ap", counterparties: COUNTERPARTIES, fingerprintKey: FP_KEY, fetch });
+  const vendor = { ...MERIDIAN, knownAccountFingerprint: await fingerprintAccount(FP_KEY, "121000248", "500045104471") };
+  const { engine } = setup({
+    environment: "sandbox", rail: column, vendors: { get: async () => structuredClone(vendor) },
+    secrets: { tokenPepper: PEPPER, fingerprintKey: FP_KEY },
+  });
+  const collision = await engine.verify(poisoned({ requestSourceDomain: "meridianglobal.com", beneficiary: { accountLast4: "4471" } }));
+  assert.equal(collision.state, "PENDING_REVIEW");
+  assert.deepEqual(collision.mismatches.map((m) => m.code), ["BENEFICIARY_CHANGED"]);
+  assert.equal(wires(calls).length, 0);
+
+  const genuine = await engine.verify(clean());
+  assert.equal(genuine.state, "CLEARED");
+  assert.equal((await engine.get("pay_18k")).rail.status, "RELEASED");
 });
 
 test("release: Basic ':key' auth, form-encoded wire, Idempotency-Key payfirewall-{paymentId}", async () => {

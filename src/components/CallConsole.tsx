@@ -2,30 +2,46 @@
 
 import { useConversation } from "@elevenlabs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CallOutcome, ChallengeView, Payment, RiskAssessment, Vendor } from "@/lib/types";
+import type { CallOutcome, ChallengeView, Payment, RiskAssessment, Snapshot, Vendor } from "@/lib/types";
 import { challengeScript, type ScriptLine } from "@/lib/voice/script";
 import { createClientTools, submitDecision, type DecisionContext } from "@/lib/voice/tools";
+import { Countdown } from "./Countdown";
+import { expiryTime, possessive, shortName, TERMINAL_STATUS, writtenDigits } from "./format";
 import { Waveform } from "./Waveform";
 
 type Phase = "idle" | "connecting" | "live" | "simulated" | "ended" | "failed";
 type Line = { speaker: "agent" | "vendor"; text: string };
+
+export interface DemoSettings {
+  vendorAnswer: "deny" | "authorize";
+  voiceOn: boolean;
+}
 
 interface TokenResponse {
   mode: "live" | "simulated";
   reason?: string;
   challengeId: string;
   responderToken: string;
+  /** For the scripted vendor only; never sent to the voice provider. */
+  beneficiaryLast4: string;
   conversationToken?: string;
-  dynamicVariables: { amount: string; vendor: string; newLast4: string; payer: string } & Record<string, string>;
+  dynamicVariables: { amount: string; vendor: string; payer: string } & Record<string, string>;
 }
 
 const CHANNEL_LABEL: Record<string, string> = {
   voice_browser: "browser voice call",
+  voice_phone: "phone call",
   human_approval: "approval link",
   scripted: "scripted call",
 };
 
-const TERMINAL = new Set(["CLEARED", "QUARANTINED"]);
+const VERDICT_TEXT = {
+  AUTHORIZED: { text: "Vendor confirmed the change", tone: "text-cleared" },
+  DENIED: { text: "Vendor denied the change", tone: "text-signal" },
+  INCONCLUSIVE: { text: "No clear answer. Failed closed", tone: "text-signal" },
+} as const;
+
+const TOKEN_ATTEMPTS = 6;
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -35,6 +51,10 @@ export function CallConsole({
   assessment,
   call,
   challenge,
+  demo,
+  environment,
+  voiceAgent,
+  frozenReason,
   onDecided,
 }: {
   payment: Payment;
@@ -42,6 +62,11 @@ export function CallConsole({
   assessment?: RiskAssessment;
   call?: CallOutcome;
   challenge?: ChallengeView;
+  demo: DemoSettings;
+  environment: string;
+  voiceAgent: Snapshot["voiceAgent"];
+  /** Reason on the FROZEN ledger entry, so an operator freeze is never shown as a vendor answer. */
+  frozenReason?: string;
   onDecided: () => void;
 }) {
   const conversation = useConversation();
@@ -49,23 +74,28 @@ export function CallConsole({
   const [lines, setLines] = useState<Line[]>(() => (call?.transcript ? parseTranscript(call.transcript) : []));
   const [speaking, setSpeaking] = useState<"agent" | "vendor" | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [vendorAnswer, setVendorAnswer] = useState<"deny" | "authorize">("deny");
-  const [voiceOn, setVoiceOn] = useState(true);
+  const [freezing, setFreezing] = useState(false);
+  // True once this console has run the local script, or when no voice agent is configured at all.
+  const [scripted, setScripted] = useState(voiceAgent === "scripted");
   const started = useRef(false);
   const linesRef = useRef<Line[]>(lines);
   const cancelled = useRef(false);
   const transcriptBox = useRef<HTMLDivElement>(null);
+  // Read when a call starts, so changing Demo controls mid-call never alters a running script.
+  const demoRef = useRef(demo);
+  useEffect(() => {
+    demoRef.current = demo;
+  }, [demo]);
 
   useEffect(() => {
-    transcriptBox.current?.scrollTo({ top: transcriptBox.current.scrollHeight, behavior: "smooth" });
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    transcriptBox.current?.scrollTo({ top: transcriptBox.current.scrollHeight, behavior: reduce ? "auto" : "smooth" });
   }, [lines.length]);
 
   const push = useCallback((l: Line) => {
     linesRef.current = [...linesRef.current, l];
     setLines(linesRef.current);
   }, []);
-
-  const [freezing, setFreezing] = useState(false);
 
   const ctx = useCallback(
     (startedAt: number, token: TokenResponse): DecisionContext => ({
@@ -82,8 +112,10 @@ export function CallConsole({
   const runSimulated = useCallback(
     async (token: TokenResponse) => {
       setPhase("simulated");
+      setScripted(true);
+      const { vendorAnswer, voiceOn } = demoRef.current;
       const startedAt = Date.now();
-      const script = challengeScript(token.dynamicVariables, vendorAnswer);
+      const script = challengeScript(token.dynamicVariables, vendorAnswer, token.beneficiaryLast4);
       await wait(900); // ring
       for (const [i, line] of script.entries()) {
         if (cancelled.current) return;
@@ -95,7 +127,7 @@ export function CallConsole({
         if (last) {
           const tool = vendorAnswer === "deny" ? "freeze_payment" : "approve_payment";
           await wait(700);
-          await submitDecision(ctx(startedAt, token), tool, vendorAnswer === "deny" ? "DENIED" : "AUTHORIZED");
+          await submitDecision(ctx(startedAt, token), tool, vendorAnswer === "deny" ? "DENIED" : "AUTHORIZED", token.beneficiaryLast4);
         }
         await spoken;
         setSpeaking(null);
@@ -103,7 +135,7 @@ export function CallConsole({
       }
       setPhase("ended");
     },
-    [ctx, push, vendorAnswer, voiceOn],
+    [ctx, push],
   );
 
   const start = useCallback(async () => {
@@ -112,18 +144,30 @@ export function CallConsole({
     setPhase("connecting");
     let token: TokenResponse;
     try {
-      const res = await fetch(`/api/voice/token?paymentId=${payment.id}`, { cache: "no-store" });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? `token route ${res.status}`);
+      // The engine records the open challenge before the channel starts it, so the voice session can lag the
+      // dashboard's refresh by a moment: the route answers 202 until it exists.
+      let res: Response;
+      let body: TokenResponse & { error?: string };
+      for (let attempt = 1; ; attempt++) {
+        res = await fetch(`/api/voice/token?paymentId=${payment.id}`, { cache: "no-store" });
+        body = await res.json();
+        if (res.status !== 202 || attempt === TOKEN_ATTEMPTS || cancelled.current) break;
+        await wait(700);
+      }
+      if (res.status !== 200) throw new Error(body.error ?? "voice session did not start");
       token = body;
     } catch (err) {
       setPhase("failed");
-      setNote(`Could not start the vendor call (${(err as Error).message}). Payment stays held.`);
+      setNote(
+        environment === "production"
+          ? "Voice unavailable, use approval link. The payment stays held."
+          : `Could not start the vendor call (${(err as Error).message}). The payment stays held.`,
+      );
       return;
     }
 
     if (token.mode === "simulated" || !token.conversationToken) {
-      setNote(`Scripted call: ${token.reason ?? "voice agent unavailable"}. Uses the same freeze and approve tools.`);
+      setNote(`Scripted call (${token.reason ?? "voice agent unavailable"}). It uses the same freeze and approve tools as the live agent.`);
       return runSimulated(token);
     }
 
@@ -147,10 +191,12 @@ export function CallConsole({
       setNote(`Voice agent failed to start (${(err as Error).message}). Falling back to the scripted call.`);
       runSimulated(token);
     }
-  }, [conversation, ctx, payment.id, push, runSimulated]);
+  }, [conversation, ctx, environment, payment.id, push, runSimulated]);
 
-  const voiceChallengeOpen = payment.status === "CHALLENGING" && challenge?.channel === "voice_browser" && challenge.status === "OPEN";
-  const awaitingApproval = payment.status === "CHALLENGING" && challenge?.channel === "human_approval" && challenge.status === "OPEN";
+  const open = payment.status === "CHALLENGING" && challenge?.status === "OPEN";
+  const voiceChallengeOpen = open && challenge?.channel === "voice_browser";
+  const approvalChannel = challenge?.channel === "human_approval";
+  const awaitingApproval = open && approvalChannel;
 
   // Auto-dial once forensics opens a voice_browser challenge. Other channels are answered elsewhere.
   useEffect(() => {
@@ -191,108 +237,155 @@ export function CallConsole({
   }, []);
 
   const onLine = phase === "live" || phase === "simulated" || phase === "connecting";
-  const channelLabel = challenge ? CHANNEL_LABEL[challenge.channel] ?? challenge.channel : null;
-  const expiresAt = challenge ? new Date(challenge.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+  // A scripted call is never presented as the live voice agent.
+  const channelLabel = scripted && challenge?.channel === "voice_browser" ? CHANNEL_LABEL.scripted : challenge ? CHANNEL_LABEL[challenge.channel] ?? challenge.channel.replace(/_/g, " ") : null;
+  const name = shortName(vendor.legalName);
+  const dial = challenge?.dialMasked ?? assessment?.verifiedCallbackPhone;
+  const verdict =
+    frozenReason === "BLOCKED_BY_PRINCIPAL"
+      ? { text: "Frozen from the operator console before the vendor answered", tone: "text-signal" }
+      : call
+        ? VERDICT_TEXT[call.verdict]
+        : null;
+  const expired = challenge?.status === "EXPIRED";
+  const notNeeded = payment.status === "CLEARED" && !challenge && lines.length === 0;
+
   const statusText = awaitingApproval
-    ? `Awaiting confirmation · expires ${expiresAt}`
+    ? "Awaiting confirmation"
     : phase === "connecting"
-      ? `Dialing ${assessment?.verifiedCallbackPhone ?? "verified number"}…`
+      ? "Dialing…"
       : phase === "live"
-        ? "Connected (ElevenLabs voice agent)"
+        ? "Connected"
         : phase === "simulated"
-          ? "On call (scripted)"
-          : phase === "ended"
-            ? call
-              ? `Call ended: ${call.toolInvoked ?? "no tool"} (${call.durationSec}s)`
-              : "Call ended"
-            : phase === "failed"
-              ? "Call failed"
-              : payment.status === "RECEIVED" || payment.status === "CLEARED"
-                ? "No call needed yet"
-                : challenge
-                  ? `Challenge ${challenge.status.toLowerCase()} (${channelLabel})`
-                  : "Waiting for forensics";
+          ? "On call"
+          : phase === "failed"
+            ? "Call failed"
+            : expired
+              ? "Expired"
+              : verdict
+                ? frozenReason === "BLOCKED_BY_PRINCIPAL"
+                  ? "Frozen"
+                  : "Answer recorded"
+                : payment.status === "RECEIVED"
+                  ? "Not started"
+                  : payment.status === "CLEARED"
+                    ? "Not needed"
+                    : payment.status === "QUARANTINED"
+                      ? "Closed"
+                      : "Waiting for forensics";
 
   return (
-    <section aria-label="Out-of-band call" className="rounded-md border border-rule bg-panel">
-      <div className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-2.5">
-        <h2 className="font-display text-lg font-semibold">
-          Vendor call{channelLabel && <span className="ml-2 text-sm font-normal text-muted">via {channelLabel}</span>}
+    <section aria-labelledby="confirmation-heading" className="rounded-md border border-rule bg-panel">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-rule px-4 py-2.5">
+        <h2 id="confirmation-heading" className="font-display text-lg font-semibold">
+          Vendor confirmation
         </h2>
-        <span className={`text-sm ${onLine ? "text-brass" : "text-muted"}`}>{statusText}</span>
+        <span className={`inline-flex items-center gap-1.5 text-sm ${onLine || awaitingApproval ? "text-brass" : "text-muted"}`}>
+          {(onLine || awaitingApproval) && <span className="h-1.5 w-1.5 rounded-full bg-brass motion-safe:animate-pulse" aria-hidden />}
+          {statusText}
+        </span>
       </div>
 
-      <div className="px-4 pt-4">
-        <div className="flex items-center gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-muted">{awaitingApproval ? "Awaiting confirmation from the controller of" : "Calling the controller at"}</p>
-            <p className="truncate font-display text-lg font-medium">
-              {vendor.legalName.replace(/ LLC$/, "")}
-              {awaitingApproval
-                ? challenge?.dialMasked && <span className="text-muted"> via {challenge.dialMasked}</span>
-                : assessment?.verifiedCallbackPhone && <span className="text-muted"> {assessment.verifiedCallbackPhone}</span>}
+      {approvalChannel ? (
+        <div className="px-4 py-4">
+          {awaitingApproval && challenge ? (
+            <>
+              <p className="text-[15px] leading-relaxed">
+                Awaiting confirmation from {possessive(name)} controller
+                {challenge.dialMasked && (
+                  <>
+                    {" "}via <span className="whitespace-nowrap font-medium">{challenge.dialMasked}</span>
+                  </>
+                )}
+                <span className="text-muted" suppressHydrationWarning> · link expires {expiryTime(challenge.expiresAt)}</span>
+              </p>
+              <Countdown expiresAt={challenge.expiresAt} className="mt-3" />
+              <p className="mt-3 text-sm text-muted">
+                An internal approver calls the vendor on the registry number and records the answer on their own device. The payment stays held
+                until then, and freezes if the link expires.
+              </p>
+            </>
+          ) : (
+            <p className="text-[15px] leading-relaxed">
+              {expired ? (
+                <span className="text-signal">The confirmation link expired without an answer. The payment was frozen.</span>
+              ) : verdict ? (
+                <span className={verdict.tone}>{verdict.text}.</span>
+              ) : (
+                <span className="text-muted">The confirmation closed.</span>
+              )}
+              {challenge?.resolvedBy && !challenge.resolvedBy.startsWith("channel:") && (
+                <span className="block text-sm text-muted">Recorded by {challenge.resolvedBy}</span>
+              )}
             </p>
-          </div>
+          )}
         </div>
-        <Waveform
-          active={onLine}
-          speaker={speaking}
-          sample={phase === "live" ? () => (speaking === "agent" ? conversation.getOutputByteFrequencyData() : conversation.getInputByteFrequencyData()) : undefined}
-        />
-      </div>
+      ) : (
+        <>
+          {!notNeeded && (
+            <div className="px-4 pt-4">
+              <p className="text-sm text-muted">
+                {onLine || payment.status === "CHALLENGING"
+                  ? `Calling the controller${channelLabel ? `, ${channelLabel}` : ""}`
+                  : lines.length > 0
+                    ? `Called the controller${channelLabel ? `, ${channelLabel}` : ""}`
+                    : "If verification needs it, SentinelPay calls"}
+              </p>
+              <p className="truncate font-display text-lg font-medium">
+                {name}
+                {dial && <span className="text-muted"> {dial}</span>}
+              </p>
+              <Waveform
+                active={onLine}
+                speaker={speaking}
+                sample={phase === "live" ? () => (speaking === "agent" ? conversation.getOutputByteFrequencyData() : conversation.getInputByteFrequencyData()) : undefined}
+              />
+            </div>
+          )}
 
-      <div ref={transcriptBox} className="scroll-thin max-h-[240px] overflow-y-auto px-4 pb-3" aria-live="polite">
-        {lines.length === 0 ? (
-          <p className="py-2 text-sm text-muted">
-            {awaitingApproval
-              ? `An approver is confirming the change with ${vendor.legalName} on the registry number (expires ${expiresAt}). The payment stays held until they record the answer.`
-              : "When the risk check finishes, SentinelPay calls the vendor on the registry number and asks one question: did you authorize this bank change?"}
-          </p>
-        ) : (
-          <ol className="flex flex-col gap-2.5 py-1">
-            {lines.map((l, i) => (
-              <li key={i} className="text-sm leading-relaxed">
-                <span className={`mr-2 font-medium ${l.speaker === "agent" ? "text-brass" : "text-paper"}`}>
-                  {l.speaker === "agent" ? "SentinelPay" : "Vendor"}
-                </span>
-                <span className="text-paper/85">{l.text}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
+          <div ref={transcriptBox} role="log" aria-live="polite" aria-label="Call transcript" tabIndex={0} className={`scroll-thin max-h-[240px] overflow-y-auto px-4 pb-3 ${notNeeded ? "pt-3" : ""}`}>
+            {lines.length === 0 ? (
+              <p className="py-2 text-sm text-muted">
+                {payment.status === "CLEARED"
+                  ? "No call was needed. The beneficiary matched the vendor master."
+                  : "When the risk check finishes, SentinelPay calls the vendor on the registry number and asks one question: did you authorize this bank change?"}
+              </p>
+            ) : (
+              <ol className="flex flex-col gap-2.5 py-1">
+                {lines.map((l, i) => (
+                  <li key={i} className="text-sm leading-relaxed">
+                    <span className={`mr-2 font-medium ${l.speaker === "agent" ? "text-brass" : "text-paper"}`}>
+                      {l.speaker === "agent" ? "SentinelPay" : "Vendor"}
+                    </span>
+                    <span className="text-paper/90">{writtenDigits(l.text)}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
 
-      {note && <p className="border-t border-rule px-4 py-2 text-xs text-muted">{note}</p>}
+          {verdict && phase === "ended" && (
+            <p className={`border-t border-rule px-4 py-2.5 text-sm font-medium ${verdict.tone}`}>
+              {verdict.text}
+              {call && call.durationSec > 0 && <span className="font-normal text-muted"> · {call.durationSec}s call</span>}
+            </p>
+          )}
+        </>
+      )}
 
-      {!TERMINAL.has(payment.status) && payment.status !== "RECEIVED" && (
-        <div className="no-print flex justify-end border-t border-rule px-4 py-3">
+      {note && <p className="border-t border-rule px-4 py-2.5 text-xs text-muted">{note}</p>}
+
+      {!TERMINAL_STATUS.has(payment.status) && payment.status !== "RECEIVED" && (
+        <div className="no-print flex items-center justify-between gap-3 border-t border-rule px-4 py-3">
+          <p className="text-xs text-muted">Stops the wire now, whatever the vendor says.</p>
           <button
+            type="button"
             onClick={freeze}
             disabled={freezing}
-            className="rounded border border-signal/60 px-3 py-1 text-sm text-signal transition-colors hover:bg-signal/10 disabled:opacity-50"
+            className="shrink-0 rounded border border-signal/70 px-3 py-1.5 text-sm font-medium text-signal transition-colors hover:bg-signal/10 disabled:opacity-60"
           >
             {freezing ? "Freezing…" : "Freeze now"}
           </button>
-        </div>
-      )}
-
-      {phase === "idle" && !call && (
-        <div className="no-print flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-rule px-4 py-3 text-sm text-muted">
-          <label className="flex items-center gap-2">
-            If scripted, vendor
-            <select
-              value={vendorAnswer}
-              onChange={(e) => setVendorAnswer(e.target.value as "deny" | "authorize")}
-              className="rounded border border-rule bg-panel-2 px-2 py-1 text-paper"
-            >
-              <option value="deny">denies the change</option>
-              <option value="authorize">confirms the change</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={voiceOn} onChange={(e) => setVoiceOn(e.target.checked)} className="accent-[var(--brass)]" />
-            Speak aloud
-          </label>
         </div>
       )}
     </section>
@@ -309,11 +402,11 @@ function parseTranscript(t: string): Line[] {
 
 /** Browser speech for the scripted call. Resolves when the line finishes (or after a reading-time estimate). */
 function say(line: ScriptLine, enabled: boolean): Promise<void> {
-  const estimate = Math.min(9000, 700 + line.text.length * 55);
+  const estimate = Math.min(9000, 700 + (line.spoken ?? line.text).length * 55);
   const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
   if (!enabled || !synth) return wait(estimate);
   return new Promise((resolve) => {
-    const u = new SpeechSynthesisUtterance(line.text);
+    const u = new SpeechSynthesisUtterance(line.spoken ?? line.text);
     const voices = synth.getVoices().filter((v) => v.lang.startsWith("en"));
     const pick = line.speaker === "agent" ? voices.find((v) => /samantha|google us english|aria|jenny/i.test(v.name)) : voices.find((v) => /daniel|alex|fred|guy|google uk english male/i.test(v.name));
     if (pick) u.voice = pick;

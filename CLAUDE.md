@@ -125,6 +125,8 @@ Pick a `requestSourceDomain` you can actually control so RDAP returns a genuinel
 - [x] integration-agent — one-click E2E, `DEMO_MODE=cache`, reset button; verified in browser (~25s click → frozen)
 - [x] deploy — Vercel production (https://sentinelpay-sigma.vercel.app) on Turso; libSQL async data layer; E2E verified on prod (release → forensics → call → FROZEN, chain ok)
 - [x] docs — landing README (problem, tracks, solution, sourced + measured numbers, mermaid architecture), docs/ARCHITECTURE.md, MIT LICENSE
+- [x] release — payfirewall + payfirewall-mcp publish-ready (npm metadata, tsup dist, publishConfig), package READMEs with type-checked samples, `scripts/pack-smoke.mjs` (tarballs installed with npm, ESM/CJS/TS/bin checks, publint + attw), `.github/workflows/ci.yml`. Not yet published to npm; mcp builds with the engine's tsup until it has its own devDependency.
+- [x] docs — root README repositioned as SentinelPay on PayFirewall, docs/ARCHITECTURE.md rewritten for the engine (ports, lifecycle, responder tokens, assurance tiers, CAS ledger, HTTP v1, MCP), .env.example complete
 - [ ] demo-agent — record video, rehearse; replace authored Tavily fixture with a real capture (`pnpm capture --write-tavily`)
 - [x] (stretch) data-agent — Column sandbox rail (`providers/column*.ts`, `pnpm column:setup`, 3 tests). Not yet run against a real sandbox key.
 - [ ] (stretch) voice-agent — Twilio outbound

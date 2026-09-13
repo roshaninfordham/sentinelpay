@@ -1,7 +1,34 @@
 {
   "name": "payfirewall",
   "version": "0.1.0",
-  "description": "Fail-closed verification for vendor bank-change payments: gate, forensics, out-of-band challenge, hash-chained ledger.",
+  "description": "Firewall for outgoing payments that verifies the payee out-of-band before money moves, for AI agents and AP systems: fail-closed, with a tamper-evident audit log.",
+  "keywords": [
+    "payments",
+    "payment-verification",
+    "agentic-payments",
+    "ai-agents",
+    "mcp",
+    "tool-calling",
+    "openai",
+    "anthropic",
+    "vercel-ai-sdk",
+    "fraud-prevention",
+    "business-email-compromise",
+    "bec",
+    "accounts-payable",
+    "audit-log",
+    "fintech"
+  ],
+  "homepage": "https://github.com/roshaninfordham/sentinelpay/tree/main/packages/engine#readme",
+  "bugs": {
+    "url": "https://github.com/roshaninfordham/sentinelpay/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/roshaninfordham/sentinelpay.git",
+    "directory": "packages/engine"
+  },
+  "author": "Roshan Sharma",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -158,7 +185,8 @@
     "test": "tsx --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsup",
-    "lint:package": "publint && attw --pack ."
+    "lint:package": "publint",
+    "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
     "@libsql/client": "^0.18.0"

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EngineError, type Verification } from "../../src/core/types";
+import { EngineError, type PayFirewall, type Verification } from "../../src/core/types";
 import { createHandler, createHttpClient, PayFirewallHttpError } from "../../src/http";
 import { callTool } from "../../src/tools";
 import { AGENT, clean, poisoned, setup } from "../core/helpers";
@@ -91,4 +91,24 @@ test("callTool over the HTTP client returns the same envelope as callTool in-pro
   const conflictRemote = await callTool(remote.client, "verify_payment", { payment: clean({ beneficiary: { accountLast4: "0000" } }) });
   const conflictLocal = await callTool(local.engine, "verify_payment", { payment: clean({ beneficiary: { accountLast4: "0000" } }) });
   assert.deepEqual(conflictRemote, conflictLocal);
+});
+
+test("callTool names the transport failure with a fixed message instead of a generic outage (DX-3)", async () => {
+  const cases: Array<[PayFirewall, RegExp, boolean]> = [
+    [roundTrip("sk_revoked").client, /API key was rejected \(HTTP 401\)/, false],
+    [createHttpClient({ baseUrl: BASE, apiKey: "k", fetch: async () => new Response("<html>Not Found</html>", { status: 404 }) }), /no PayFirewall API .*\(HTTP 404\)/, false],
+    [createHttpClient({ baseUrl: BASE, apiKey: "k", fetch: async () => { throw new TypeError("getaddrinfo ENOTFOUND internal-db"); } }), /could not reach/, true],
+    [createHttpClient({ baseUrl: BASE, apiKey: "k", fetch: async () => new Response("not json", { status: 200 }) }), /not JSON/, true],
+    [createHttpClient({ baseUrl: BASE, apiKey: "k", fetch: async () => new Response("<html>502</html>", { status: 502 }) }), /unavailable \(HTTP 502\)/, true],
+  ];
+  for (const [api, message, retryable] of cases) {
+    const r = await callTool(api, "verify_payment", { payment: clean() });
+    assert.equal(r.ok, false);
+    if (r.ok) continue;
+    assert.match(r.error.message, message);
+    assert.equal(r.error.retryable, retryable, r.error.message);
+    assert.equal(r.error.code, "STORAGE_UNAVAILABLE");
+    assert.deepEqual(r.error.nextActions, [{ type: "DO_NOT_PAY", reason: "STORAGE_UNAVAILABLE", terminal: false }]);
+    assert.ok(!r.error.message.includes("ENOTFOUND"), "transport internals leaked");
+  }
 });

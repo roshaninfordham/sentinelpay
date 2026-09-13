@@ -1,3 +1,4 @@
+import { one } from "./db";
 import { getRuntime } from "./engine";
 import { readLedger, verifyChain } from "./ledger";
 import { paymentSource, vendorDirectory } from "./providers";
@@ -5,6 +6,22 @@ import { callOutcomeOf } from "./receipt";
 import { callbackPhoneOf, maskPhone } from "./timeline-format";
 import { readTimeline } from "./timeline";
 import type { CallOutcome, ChallengeView, RiskAssessment, Snapshot } from "./types";
+
+const CHAIN_TTL_MS = 60_000;
+let chainCache: { head: string; at: number; result: Awaited<ReturnType<typeof verifyChain>> } | null = null;
+
+/**
+ * Full-chain verification for the header indicator, recomputed when a new entry is written and at least every
+ * 60 s otherwise, instead of on every poll (ENGINE_SPEC §6.3). The receipt and /api/v1/ledger/verify always recompute.
+ */
+async function recentChainCheck() {
+  const head = await one<{ seq: number; entryHash: string }>(`SELECT seq, entryHash FROM ledger ORDER BY seq DESC LIMIT 1`);
+  const key = head ? `${head.seq}:${head.entryHash}` : "empty";
+  if (chainCache?.head === key && Date.now() - chainCache.at < CHAIN_TTL_MS) return chainCache.result;
+  const result = await verifyChain();
+  chainCache = { head: key, at: Date.now(), result };
+  return result;
+}
 
 // Dashboard state for GET /api/stream. Assessments, calls and challenges are read from the engine's cases.
 export async function snapshot(): Promise<Snapshot> {
@@ -15,7 +32,7 @@ export async function snapshot(): Promise<Snapshot> {
     vendorDirectory().listAll(),
     readTimeline(),
     readLedger(),
-    verifyChain(),
+    recentChainCheck(),
   ]);
 
   const assessments: Record<string, RiskAssessment> = {};
@@ -42,6 +59,7 @@ export async function snapshot(): Promise<Snapshot> {
   return {
     environment: settings.environment,
     demoMode: settings.demoMode,
+    voiceAgent: settings.demoMode === "cache" || !settings.elevenLabs ? "scripted" : "elevenlabs",
     rail: settings.rail,
     payments,
     vendors,

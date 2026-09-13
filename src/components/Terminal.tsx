@@ -14,26 +14,53 @@ const TONE: Record<TimelineKind, string> = {
   alert: "text-signal",
 };
 
+// Probe lines served from recorded captures end in "[cached]" or "[cached: note]"; shown as a badge instead.
+const CACHED = /\s+\[cached(?::\s*([^\]]+))?\]$/;
+
 export function Terminal({ lines }: { lines: TimelineLine[] }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // scroll only the log box, never the page
-    box.current?.scrollTo({ top: box.current.scrollHeight, behavior: "smooth" });
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    box.current?.scrollTo({ top: box.current.scrollHeight, behavior: reduce ? "auto" : "smooth" });
   }, [lines.length]);
 
   return (
-    <section aria-label="Investigation log" className="rounded-md border border-rule bg-[#08121a]">
-      <h2 className="border-b border-rule px-4 py-2.5 font-display text-lg font-semibold">Investigation</h2>
-      <div ref={box} className="scroll-thin h-[300px] overflow-y-auto px-4 py-3 font-mono text-[12.5px] leading-6" aria-live="polite">
+    <section aria-labelledby="investigation-heading" className="rounded-md border border-rule bg-[#08121a]">
+      <h2 id="investigation-heading" className="border-b border-rule px-4 py-2.5 font-display text-lg font-semibold">
+        Investigation
+      </h2>
+      <div
+        ref={box}
+        role="log"
+        aria-live="polite"
+        aria-labelledby="investigation-heading"
+        tabIndex={0}
+        className="scroll-thin h-[260px] overflow-y-auto px-4 py-3 font-mono text-[12.5px] leading-6 min-[1200px]:h-[300px]"
+      >
         {lines.length === 0 ? (
-          <p className="text-muted">Findings appear here when a payment is released.</p>
+          <p className="text-muted">Findings appear here after you select Verify and release.</p>
         ) : (
-          lines.map((l) => (
-            <div key={l.id} className="grid grid-cols-[4.5rem_1fr] gap-2">
-              <span className="text-muted/60" suppressHydrationWarning>{clock(l.ts)}</span>
-              <span className={`break-words ${TONE[l.kind]}`}>{l.text}</span>
-            </div>
-          ))
+          lines.map((l) => {
+            const cached = CACHED.exec(l.text);
+            const text = cached ? l.text.slice(0, cached.index) : l.text;
+            return (
+              <div key={l.id} className="grid grid-cols-[4.25rem_1fr] gap-2">
+                <span className="text-muted" suppressHydrationWarning>{clock(l.ts)}</span>
+                <span className={`break-words ${TONE[l.kind]}`}>
+                  {text}
+                  {cached && (
+                    <span
+                      className="ml-2 inline-block rounded border border-rule px-1 align-[1px] text-[10.5px] font-normal leading-4 text-muted"
+                      title={cached[1] ? `Recorded fixture: ${cached[1]}` : "Recorded fixture"}
+                    >
+                      fixture{cached[1] && <span className="sr-only">: {cached[1]}</span>}
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })
         )}
       </div>
     </section>

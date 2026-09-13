@@ -14,6 +14,8 @@ export interface IncidentReceipt {
   /** The engine's view of the case; absent only for a payment that never reached the gate. */
   verification?: Verification;
   environment: string;
+  /** Who spoke for SentinelPay on a voice_browser call: the ElevenLabs agent, or the local script when it is not configured. */
+  voiceAgent: "elevenlabs" | "scripted";
   entries: LedgerEntry[];
   headHash: string | null;      // hash of this payment's final ledger entry
   chain: { ok: boolean; brokenAt?: number; length: number };
@@ -52,6 +54,7 @@ export async function buildReceipt(paymentId: string): Promise<IncidentReceipt> 
     call: c ? callOutcomeOf(c) : undefined,
     verification: receipt?.verification,
     environment: settings.environment,
+    voiceAgent: settings.demoMode === "cache" || !settings.elevenLabs ? "scripted" : "elevenlabs",
     entries,
     headHash: entries.at(-1)?.entryHash ?? null,
     chain: receipt?.chain ?? (await verifyChain()),

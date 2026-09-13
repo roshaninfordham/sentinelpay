@@ -171,10 +171,12 @@ test("POST /verifications/{id}/block and GET /verifications/{id}/receipt", async
   assert.deepEqual([extra.status, extra.json.error.path], [400, "/resolvedBy"]);
   assert.equal((await call("POST", "/verifications/pay_ghost/block", { key: "sk_agent", body: { reason: "fraud" } })).status, 404);
 
+  // Block is open to any authenticated principal, but a non-owner gets the same 404 as for a missing case.
   const blocked = await call("POST", "/verifications/pay_240k/block", { key: "sk_other", body: { reason: "suspected BEC" } });
-  assert.equal(blocked.status, 200, "block is open to any authenticated principal");
-  assert.equal(blocked.json.decision, "DO_NOT_PAY");
-  assert.equal(blocked.json.challenge, undefined);
+  assert.deepEqual([blocked.status, errorCode(blocked)], [404, "NOT_FOUND"]);
+  assert.ok(!blocked.text.includes("meridian-global.co"));
+  const owned = await call("GET", "/verifications/pay_240k", { key: "sk_agent" });
+  assert.deepEqual([owned.json.decision, owned.json.reason, owned.json.challenge], ["DO_NOT_PAY", "BLOCKED_BY_PRINCIPAL", undefined]);
 
   const receipt = await call("GET", "/verifications/pay_240k/receipt", { key: "sk_agent" });
   assert.equal(receipt.status, 200);

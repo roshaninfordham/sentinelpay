@@ -18,14 +18,18 @@ export interface DecisionContext {
   onDecided?: (tool: ToolName, verdict: Verdict) => void;
 }
 
-export async function submitDecision(ctx: DecisionContext, tool: ToolName, verdict: Verdict): Promise<string> {
+/** Only four digits count as a read-back; anything else is dropped, and the engine then denies an AUTHORIZED. */
+const readBackDigits = (value: unknown) => (typeof value === "string" ? value.replace(/\D/g, "") : "");
+
+export async function submitDecision(ctx: DecisionContext, tool: ToolName, verdict: Verdict, readBack?: unknown): Promise<string> {
+  const digits = readBackDigits(readBack);
   const res = await fetch("/api/governor/decide", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       paymentId: ctx.paymentId,
       challengeId: ctx.challengeId,
-      ...(verdict === "AUTHORIZED" ? { responderToken: ctx.responderToken } : {}),
+      ...(verdict === "AUTHORIZED" ? { responderToken: ctx.responderToken, ...(digits.length === 4 ? { beneficiaryLast4ReadBack: digits } : {}) } : {}),
       verdict,
       toolInvoked: tool,
       transcript: ctx.transcript(),
@@ -41,13 +45,14 @@ export async function submitDecision(ctx: DecisionContext, tool: ToolName, verdi
 /**
  * Tool handlers for `startSession({ clientTools })`. The verdict comes from which tool the agent calls and, for
  * freeze_payment, from the structured `outcome` enum; free text is never parsed. Anything other than exactly
- * "denied" freezes as INCONCLUSIVE, so a malformed call still fails closed.
+ * "denied" freezes as INCONCLUSIVE, so a malformed call still fails closed. approve_payment carries the digits the
+ * vendor read back; the engine compares them with the case and denies on a mismatch or when they are missing.
  */
 export function createClientTools(ctx: DecisionContext) {
   return {
     freeze_payment: async (params: { outcome?: unknown; reason?: string }) =>
       submitDecision(ctx, "freeze_payment", params?.outcome === "denied" ? "DENIED" : "INCONCLUSIVE"),
-    approve_payment: async () => submitDecision(ctx, "approve_payment", "AUTHORIZED"),
+    approve_payment: async (params: { last4_read_back?: unknown }) => submitDecision(ctx, "approve_payment", "AUTHORIZED", params?.last4_read_back),
   };
 }
 
@@ -76,8 +81,17 @@ export const TOOL_SCHEMA = [
     type: "client",
     name: "approve_payment",
     description:
-      "Release the pending wire. Call ONLY after the controller explicitly confirms their treasury team authorized the new account ending {{newLast4}}.",
-    parameters: { type: "object", properties: {} },
+      "Request release of the pending wire. Call ONLY after the controller explicitly confirms their treasury team authorized the change and reads back the last 4 digits of the new account.",
+    parameters: {
+      type: "object",
+      properties: {
+        last4_read_back: {
+          type: "string",
+          description: "The last 4 digits of the new account exactly as the controller read them. Never suggest or repeat digits yourself.",
+        },
+      },
+      required: ["last4_read_back"],
+    },
     expects_response: true,
   },
 ] as const;

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { memoryStorage } from "../../src/adapters/memory";
 import { fixedClock, pendingChallenger, scriptedChallenger, seqIds } from "../../src/testing";
 import type { Challenger } from "../../src/core/types";
-import { AGENT, APPROVER, MERIDIAN, OPERATOR, REGISTRY_PHONE, T0, clean, code, eventsOf, poisoned, setup, spyRail } from "./helpers";
+import { AGENT, APPROVER, FP_KEY, MERIDIAN, OPERATOR, REGISTRY_PHONE, T0, clean, code, eventsOf, poisoned, setup, spyRail } from "./helpers";
 
 const DENY_CHAIN = ["INTERCEPTED", "INVESTIGATION_STARTED", "FORENSICS", "CHALLENGE_STARTED", "CALL_RESULT", "FROZEN"];
 
@@ -54,7 +54,7 @@ test("full deny pipeline ends QUARANTINED with exactly the 6-event chain", async
   assert.deepEqual(receipt.entries.map((e) => e.event), DENY_CHAIN);
   assert.equal(receipt.chain.ok, true);
   assert.equal(receipt.headHash, receipt.verification.proof.ledgerHeadHash);
-  assert.equal(receipt.incidentId, "INC-PAY_240K-1");
+  assert.equal(receipt.incidentId, "INC-PAY_240K");
 
   assert.deepEqual(events.filter((e) => e.type === "state").map((e) => e.type === "state" && `${e.from}>${e.to}`), [
     "RECEIVED>PENDING_REVIEW", "PENDING_REVIEW>INVESTIGATING", "INVESTIGATING>CHALLENGING", "CHALLENGING>QUARANTINED",
@@ -245,4 +245,43 @@ test("accountNumber is fingerprinted, never stored, and a matching fingerprint c
   assert.equal(v.beneficiary.strength, "fingerprint");
   assert.ok(!JSON.stringify(await storage.load({ paymentId: "pay_18k" })).includes("000000004471"));
   assert.ok(!JSON.stringify(await storage.ledger()).includes("000000004471"));
+});
+
+test("RETRY nextAction args re-verify as-is when the payment carried accountNumber (DX-1)", async () => {
+  const storage = memoryStorage();
+  const rail = spyRail(() => storage.ledger(), "4471");
+  delete (rail as Partial<typeof rail>).readBeneficiary; // the caller's beneficiary is what gets verified
+  rail.failNextRelease();
+  const s = setup({ storage, rail, secrets: { tokenPepper: "p".repeat(32), fingerprintKey: FP_KEY } });
+  const beneficiary = { accountLast4: "4471", accountNumber: "0000004471", routingNumber: "021000021" };
+  const v1 = await s.engine.verify(clean({ beneficiary }));
+  assert.deepEqual([v1.decision, v1.reason], ["PAY", "RAIL_RELEASE_FAILED"]);
+  const retry = v1.nextActions[0];
+  assert.ok(retry.type === "RETRY");
+  assert.equal("accountNumber" in retry.args.payment.beneficiary, false);
+
+  const v2 = await s.engine.verify(retry.args.payment);
+  assert.deepEqual([v2.decision, v2.reason, v2.rail.reference], ["PAY", "RAIL_RELEASED", "wire_2"]);
+  assert.ok(!(await eventsOf(storage)).includes("IDEMPOTENCY_CONFLICT"));
+
+  // A different full account with the same last 4 is still a changed request.
+  await assert.rejects(s.engine.verify(clean({ beneficiary: { ...beneficiary, accountNumber: "9999994471" } })), code("IDEMPOTENCY_CONFLICT"));
+});
+
+test("RETRY nextAction args re-verify as-is when the rail overrode the claimed last4", async () => {
+  const storage = memoryStorage();
+  const rail = spyRail(() => storage.ledger(), "9821");
+  const s = setup({ storage, rail });
+  await s.engine.verify(poisoned({ beneficiary: { accountLast4: "4471" } }));
+  await s.engine.advance("pay_240k");
+  rail.failNextRelease();
+  const { challengeId, responderToken } = s.starts[0];
+  const v1 = await s.engine.resolveChallenge({ challengeId, verdict: "AUTHORIZED", responderToken, responder: APPROVER });
+  assert.deepEqual([v1.decision, v1.reason], ["PAY", "RAIL_RELEASE_FAILED"]);
+  const retry = v1.nextActions[0];
+  assert.ok(retry.type === "RETRY");
+  const v2 = await s.engine.verify(retry.args.payment);
+  assert.deepEqual([v2.decision, v2.reason], ["PAY", "RAIL_RELEASED"]);
+  // The originally submitted request is still the same request, too.
+  assert.equal((await s.engine.verify(poisoned({ beneficiary: { accountLast4: "4471" } }))).version, v2.version);
 });

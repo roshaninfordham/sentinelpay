@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createEngine, type EngineConfig, type PayFirewall } from "payfirewall";
 import { createHttpClient } from "payfirewall/client";
-import { resolveLaunch, USAGE, UsageError, type LaunchMode } from "./config";
+import { reportingFetch, resolveLaunch, USAGE, UsageError, type LaunchMode } from "./config";
 import { createMcpServer, DEFAULT_SWEEP_INTERVAL_MS, type McpServerOptions } from "./server";
 
 // The only place in payfirewall-mcp that reads the environment. stdout carries the MCP protocol,
@@ -23,7 +23,8 @@ async function loadEngineConfig(configPath: string): Promise<EngineConfig> {
 
 async function build(launch: Exclude<LaunchMode, { mode: "help" }>): Promise<{ api: PayFirewall; opts: McpServerOptions }> {
   if (launch.mode === "remote") {
-    return { api: createHttpClient({ baseUrl: launch.url, apiKey: launch.apiKey }), opts: {} };
+    const fetch = reportingFetch(log, (input, init) => globalThis.fetch(input, init));
+    return { api: createHttpClient({ baseUrl: launch.url, apiKey: launch.apiKey, fetch }), opts: {} };
   }
   // createEngine refuses any configuration that would weaken a fail-closed guarantee.
   const engine = createEngine(await loadEngineConfig(launch.configPath));

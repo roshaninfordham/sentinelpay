@@ -282,3 +282,68 @@ test("rail beneficiary drift after CLEARED: no release, DO_NOT_PAY, and no relea
   assert.equal(retried.decision, "DO_NOT_PAY");
   assert.equal(rail.releases.length, 0);
 });
+
+test("a sibling case opened before the denial cannot clear afterwards (SEC-03)", async () => {
+  const s = setup();
+  const a = await openChallenge(s, poisoned({ id: "pay_a" }));
+  const b = await openChallenge(s, poisoned({ id: "pay_b" }));
+  const c = await openChallenge(s, poisoned({ id: "pay_c" }));
+  assert.equal((await s.engine.resolveChallenge({ challengeId: a.challengeId, verdict: "DENIED" })).reason, "VENDOR_DENIED_CHANGE");
+
+  const sibling = await s.engine.resolveChallenge({ challengeId: b.challengeId, verdict: "AUTHORIZED", responderToken: b.responderToken });
+  assert.deepEqual([sibling.state, sibling.decision, sibling.reason], ["QUARANTINED", "DO_NOT_PAY", "BENEFICIARY_PREVIOUSLY_DENIED"]);
+  assert.equal(sibling.challenge?.verdict, "DENIED");
+  const frozen = (await s.storage.ledger({ paymentId: "pay_b" })).find((e) => e.event === "FROZEN")!.payload as Record<string, unknown>;
+  assert.deepEqual([frozen.reason, frozen.deniedPaymentId], ["BENEFICIARY_PREVIOUSLY_DENIED", "pay_a"]);
+
+  // An operator responder may still clear a sibling.
+  const byOperator = await s.engine.resolveChallenge({ challengeId: c.challengeId, verdict: "AUTHORIZED", responderToken: c.responderToken, responder: OPERATOR });
+  assert.equal(byOperator.state, "CLEARED");
+});
+
+test("an operator re-verify opened after a denial can still be authorized by the vendor", async () => {
+  const s = setup();
+  const denied = await openChallenge(s);
+  await s.engine.resolveChallenge({ challengeId: denied.challengeId, verdict: "DENIED" });
+  await s.engine.verify(poisoned({ id: "pay_240k_ops" }), { principal: OPERATOR });
+  const ops = await s.engine.withPrincipal(OPERATOR).advance("pay_240k_ops");
+  assert.equal(ops.state, "CHALLENGING");
+  const req = s.starts.at(-1)!;
+  const v = await s.engine.resolveChallenge({ challengeId: req.challengeId, verdict: "AUTHORIZED", responderToken: req.responderToken });
+  assert.equal(v.state, "CLEARED");
+});
+
+test("CALL_RESULT records requestedBy next to resolvedBy, so a token-only self-approval is attributable (SEC-06)", async () => {
+  const s = setup();
+  const req = await openChallenge(s);
+  await s.engine.resolveChallenge({ challengeId: req.challengeId, verdict: "AUTHORIZED", responderToken: req.responderToken });
+  const call = (await s.storage.ledger()).find((e) => e.event === "CALL_RESULT")!.payload as Record<string, unknown>;
+  assert.equal(call.requestedBy, AGENT.id);
+  assert.match(String(call.resolvedBy), /^channel:/);
+});
+
+test("block by another principal commits but answers NOT_FOUND, like a missing case (DX-2)", async () => {
+  const s = setup();
+  await s.engine.verify(poisoned());
+  const stranger = { id: "agent:mallory", kind: "agent" as const, roles: ["requester" as const] };
+  await assert.rejects(s.engine.block("pay_240k", { reason: "because", principal: stranger }), code("NOT_FOUND"));
+  await assert.rejects(s.engine.block("pay_missing", { reason: "because", principal: stranger }), code("NOT_FOUND"));
+  const v = await s.engine.get("pay_240k");
+  assert.deepEqual([v.state, v.reason], ["QUARANTINED", "BLOCKED_BY_PRINCIPAL"]);
+  // An operator still gets the full view.
+  const ops = await s.engine.block("pay_240k", { reason: "confirmed BEC", principal: OPERATOR });
+  assert.equal(ops.paymentId, "pay_240k");
+});
+
+test("a receipt's chain and incidentId reveal nothing about other payments (DX-2)", async () => {
+  const s = setup();
+  await s.engine.verify(poisoned());
+  await s.engine.advance("pay_240k");
+  const stranger = { id: "agent:mallory", kind: "agent" as const, roles: ["requester" as const] };
+  await s.engine.verify(poisoned({ id: "pay_m" }), { principal: stranger });
+  const receipt = await s.engine.receipt("pay_m", { principal: stranger });
+  const own = receipt.entries.length;
+  assert.ok(own < (await s.engine.verifyLedger()).length);
+  assert.deepEqual(receipt.chain, { ok: true, length: own });
+  assert.equal(receipt.incidentId, "INC-PAY_M");
+});

@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { normalizeHostname, requireOperator } from "@/lib/auth";
 import { investigate } from "@/lib/forensics";
 import { runGate } from "@/lib/gate";
 import { legacyError } from "@/lib/legacy-response";
@@ -10,13 +11,24 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // Mock ERP/AP disbursement event. Accepts a Payment-shaped body, ingests it as RECEIVED, runs engine.verify().
+// Production requires an operator key; AP systems and agents integrate through /api/v1.
 export async function POST(req: Request) {
+  try {
+    const gate = await requireOperator(req);
+    if (gate instanceof Response) return gate;
+  } catch (err) {
+    return legacyError(err, 500);
+  }
+
   const body = (await req.json().catch(() => null)) as Partial<Payment> | null;
   const required = ["id", "vendorId", "amountCents", "claimedBankLast4", "requestSourceDomain"] as const;
   const missing = required.filter((k) => body?.[k] === undefined || body?.[k] === "");
   if (!body || missing.length) {
     return Response.json({ error: `missing fields: ${missing.join(", ")}` }, { status: 400 });
   }
+  // The domain is attacker-controlled and reaches the voice agent's prompt, so only a bare hostname is accepted.
+  const requestSourceDomain = normalizeHostname(body.requestSourceDomain);
+  if (!requestSourceDomain) return Response.json({ error: "requestSourceDomain must be a hostname" }, { status: 400 });
 
   const payment: Payment = {
     id: String(body.id),
@@ -24,7 +36,7 @@ export async function POST(req: Request) {
     amountCents: Number(body.amountCents),
     currency: "USD",
     claimedBankLast4: String(body.claimedBankLast4),
-    requestSourceDomain: String(body.requestSourceDomain),
+    requestSourceDomain,
     invoiceContactPhone: body.invoiceContactPhone,
     status: "RECEIVED",
     createdAt: body.createdAt ?? new Date().toISOString(),

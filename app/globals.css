@@ -6,9 +6,10 @@
   --panel-2: #182a39;
   --rule: #233747;
   --paper: #e4ecf1;
-  --muted: #8597a6;
+  --muted: #8a9cab;
   --brass: #d6a23e;
-  --signal: #e5484d;
+  /* Text-weight red: 4.8:1 on panel-2, 5.3:1 on panel. The shield itself keeps the deeper #e5484d fill. */
+  --signal: #f2676b;
   --cleared: #46be86;
 }
 
@@ -49,22 +50,54 @@ body {
   scrollbar-color: var(--rule) transparent;
 }
 
+.skeleton {
+  border-radius: 0.25rem;
+  background: linear-gradient(90deg, var(--panel-2) 0%, color-mix(in oklab, var(--rule) 80%, var(--panel-2)) 50%, var(--panel-2) 100%);
+  background-size: 200% 100%;
+  animation: skeleton 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+details > summary {
+  list-style: none;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
 @media print {
+  @page {
+    margin: 16mm;
+  }
   html,
   body {
     background: #fff;
     color: #000;
+    font-size: 11pt;
   }
   .no-print {
     display: none !important;
+  }
+  .print-avoid-break {
+    break-inside: avoid;
   }
 }

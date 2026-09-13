@@ -1,7 +1,7 @@
 import { resolveConfig, type Settings } from "./config";
 import { evaluateGate } from "./gate";
 import { fingerprintAccount, sha256Hex, verifyEntries } from "./hash";
-import { decisionFor, errorNextActions } from "./next-actions";
+import { decisionFor, errorNextActions, toPaymentInput } from "./next-actions";
 import { assessRisk, withMissingSignalsAdverse } from "./policy";
 import { isTerminal, transition } from "./state";
 import { hashResponderToken, newChallengeId, newResponderToken, responderTokenMatches } from "./token";
@@ -150,8 +150,36 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
       p.requestSourceDomain, p.invoiceContactPhone ?? "",
     ]));
 
+  /**
+   * Whether an incoming request is the one the case was opened for: the original submission, or the case's own
+   * RETRY args. Those are rebuilt from the verified payment, so they carry the rail's last4 and no accountNumber.
+   */
+  const sameRequest = async (existing: CaseRecord, fingerprint: string) =>
+    existing.requestFingerprint === fingerprint || (await requestFingerprintFor(toPaymentInput(existing.payment))) === fingerprint;
+
   const sameBeneficiary = (a: StoredPayment["beneficiary"], b: StoredPayment["beneficiary"]) =>
     a.accountFingerprint && b.accountFingerprint ? a.accountFingerprint === b.accountFingerprint : a.accountLast4 === b.accountLast4;
+
+  /** §4.3 rule 7: a QUARANTINED case of the same vendor whose changed beneficiary equals this payment's. */
+  const deniesBeneficiary = (q: CaseRecord, paymentId: string, p: StoredPayment) =>
+    q.state === "QUARANTINED" && q.paymentId !== paymentId && q.payment.vendorId === p.vendorId &&
+    q.mismatches.some((m) => m.code === "BENEFICIARY_CHANGED") && sameBeneficiary(q.payment.beneficiary, p.beneficiary);
+
+  /**
+   * A sibling case with the same beneficiary that was frozen after this case opened. Earlier denials were already
+   * applied when the case was created (and only an operator gets past them), so they do not count again here.
+   */
+  async function deniedSinceOpened(c: CaseRecord): Promise<CaseRecord | undefined> {
+    const siblings = (await storage.list({ states: ["QUARANTINED"], vendorId: c.payment.vendorId }))
+      .filter((q) => q.reason !== "BENEFICIARY_PREVIOUSLY_DENIED" && deniesBeneficiary(q, c.paymentId, c.payment));
+    if (siblings.length === 0) return undefined;
+    const openedSeq = (await storage.ledger({ paymentId: c.paymentId }))[0]?.seq ?? 0;
+    for (const q of siblings) {
+      const frozen = (await storage.ledger({ paymentId: q.paymentId })).find((e) => e.event === "FROZEN");
+      if (frozen && frozen.seq > openedSeq) return q;
+    }
+    return undefined;
+  }
 
   async function conflict(existing: CaseRecord, detail: Record<string, unknown>): Promise<never> {
     await commit(existing, existing, [{ event: "IDEMPOTENCY_CONFLICT", payload: detail }]);
@@ -209,8 +237,7 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
 
     if (mismatches.some((m) => m.code === "BENEFICIARY_CHANGED") && !isOperator(principal)) {
       const quarantined = await storage.list({ states: ["QUARANTINED"], vendorId: input.vendorId });
-      const denied = quarantined.find((q) =>
-        q.mismatches.some((m) => m.code === "BENEFICIARY_CHANGED") && sameBeneficiary(q.payment.beneficiary, payment.beneficiary));
+      const denied = quarantined.find((q) => deniesBeneficiary(q, input.id, payment));
       if (denied) {
         return commit(null, { ...base, state: transition("RECEIVED", "PREVIOUSLY_DENIED"), reason: "BENEFICIARY_PREVIOUSLY_DENIED" },
           [intercepted, { event: "FROZEN", payload: { reason: "BENEFICIARY_PREVIOUSLY_DENIED", deniedPaymentId: denied.paymentId } }], [gateEvent]);
@@ -473,11 +500,31 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
     }
 
     const resolvedBy = responder?.id ?? channelPrincipalId(ch.channel);
-    const reason: ReasonCode = verdict === "AUTHORIZED" ? "VENDOR_CONFIRMED_CHANGE" : verdict === "DENIED" ? "VENDOR_DENIED_CHANGE" : "CHALLENGE_INCONCLUSIVE";
     const callResult = {
       challengeId: ch.challengeId, verdict, requestedVerdict: input.verdict, answers: input.answers ?? null, evidence: input.evidence ?? null,
-      resolvedBy, authorizedWithToken: source === "ingress" && wantsAuthorize,
+      requestedBy: c.requestedBy, resolvedBy, authorizedWithToken: source === "ingress" && wantsAuthorize,
     };
+    const challengeEvent: EngineEvent = { type: "challenge", paymentId: c.paymentId, challengeId: ch.challengeId, channel: ch.channel, status: "RESOLVED", ts: iso() };
+
+    // §4.3 rule 7 for cases opened in parallel: a sibling denied while this challenge was open stops it clearing.
+    const sibling = verdict === "AUTHORIZED" && c.mismatches.some((m) => m.code === "BENEFICIARY_CHANGED") && !(responder && isOperator(responder))
+      ? await deniedSinceOpened(c)
+      : undefined;
+    if (sibling) {
+      const frozen = await commit(c, {
+        ...c,
+        state: transition(c.state, "PREVIOUSLY_DENIED"),
+        reason: "BENEFICIARY_PREVIOUSLY_DENIED",
+        challenge: { ...ch, status: "RESOLVED", verdict: "DENIED", resolvedBy, resolvedAt: iso(), evidence: input.evidence },
+      }, [
+        { event: "CALL_RESULT", payload: { ...callResult, verdict: "DENIED", reason: "BENEFICIARY_PREVIOUSLY_DENIED", deniedPaymentId: sibling.paymentId } },
+        { event: "FROZEN", payload: { verdict: "DENIED", reason: "BENEFICIARY_PREVIOUSLY_DENIED", deniedPaymentId: sibling.paymentId, amountCents: c.payment.amountCents } },
+      ], [challengeEvent]);
+      await cancelChallenge(frozen);
+      return frozen;
+    }
+
+    const reason: ReasonCode = verdict === "AUTHORIZED" ? "VENDOR_CONFIRMED_CHANGE" : verdict === "DENIED" ? "VENDOR_DENIED_CHANGE" : "CHALLENGE_INCONCLUSIVE";
     const resolved = await commit(c, {
       ...c,
       state: transition(c.state, verdict === "AUTHORIZED" ? "AUTHORIZE" : verdict === "DENIED" ? "DENY" : "INCONCLUSIVE"),
@@ -488,7 +535,7 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
       verdict === "AUTHORIZED"
         ? { event: "CLEARED", payload: { verdict, challengeId: ch.challengeId, reason } }
         : { event: "FROZEN", payload: { verdict, reason, amountCents: c.payment.amountCents } },
-    ], [{ type: "challenge", paymentId: c.paymentId, challengeId: ch.challengeId, channel: ch.channel, status: "RESOLVED", ts: iso() }]);
+    ], [challengeEvent]);
     if (verdict !== "AUTHORIZED") await cancelChallenge(resolved);
     return resolved;
   }
@@ -562,6 +609,14 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
       { type: "rail", paymentId, status: "RELEASED", reference: released.reference, ts: iso() });
   }
 
+  /** Recomputes the global chain, optionally only up to and including `throughSeq`. */
+  async function checkChain(throughSeq?: number) {
+    // Adapters return the exact hashed payloadJson; re-serializing is only a fallback for adapters that do not.
+    const entries = (await storage.ledger()) as Array<LedgerEntry & { payloadJson?: string }>;
+    const scoped = throughSeq === undefined ? entries : entries.filter((e) => e.seq <= throughSeq);
+    return verifyEntries(scoped.map((e) => ({ ...e, payloadJson: e.payloadJson ?? JSON.stringify(e.payload ?? null) })));
+  }
+
   // ── lazy stepping ──
 
   /** One idempotent step: lease + investigate, expiry, start retries, poll, pending settlement. */
@@ -604,7 +659,7 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
           if (!existing) return createCase(input, stored, key, fingerprint, principal);
           const detail = { paymentId: input.id, requestedBy: principal.id, claimedLast4: input.beneficiary.accountLast4 };
           if (existing.idempotencyKey !== key || existing.paymentId !== input.id) return conflict(existing, { ...detail, cause: "KEY_MISMATCH" });
-          if (existing.requestFingerprint !== fingerprint) return conflict(existing, { ...detail, cause: "REQUEST_CHANGED" });
+          if (!(await sameRequest(existing, fingerprint))) return conflict(existing, { ...detail, cause: "REQUEST_CHANGED" });
           if (existing.requestedBy !== principal.id && !isOperator(principal)) return conflict(existing, { ...detail, cause: "PRINCIPAL_MISMATCH" });
           return existing;
         });
@@ -644,12 +699,14 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
             stepLeaseUntil: undefined,
             ...(ch ? { challenge: { ...ch, status: "RESOLVED" as const, verdict: "DENIED" as const, resolvedBy: principal.id, resolvedAt: iso() } } : {}),
           }, [
-            { event: "CALL_RESULT", payload: { challengeId: ch?.challengeId ?? null, verdict: "DENIED", tool: null, resolvedBy: principal.id, reason: "BLOCKED_BY_PRINCIPAL", note } },
+            { event: "CALL_RESULT", payload: { challengeId: ch?.challengeId ?? null, verdict: "DENIED", tool: null, requestedBy: cur.requestedBy, resolvedBy: principal.id, reason: "BLOCKED_BY_PRINCIPAL", note } },
             { event: "FROZEN", payload: { verdict: "DENIED", reason: "BLOCKED_BY_PRINCIPAL", amountCents: cur.payment.amountCents } },
           ]);
           if (ch) await cancelChallenge(blocked);
           return blocked;
         });
+        // The block stands, but a non-owner learns no more than from a missing case (§4.5 rule 5).
+        assertCanRead(principal, c);
         return view(c);
       });
     },
@@ -662,14 +719,16 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
         const c = await step(paymentId);
         const entries = (await storage.ledger({ paymentId })).map(({ seq, paymentId: id, event, payload, prevHash, entryHash, ts }) =>
           ({ seq, paymentId: id, event, payload, prevHash, entryHash, ts }));
+        const chain = await checkChain(entries.at(-1)?.seq ?? 0);
         return {
-          incidentId: `INC-${paymentId.toUpperCase()}-${entries[0]?.seq ?? 0}`,
+          incidentId: `INC-${paymentId.toUpperCase()}`,
           generatedAt: iso(),
           verification: await view(c),
           vendor: c.vendorSnapshot,
           entries,
           headHash: entries.at(-1)?.entryHash ?? null,
-          chain: await engine.verifyLedger(),
+          // Scoped to this payment: the chain prefix its entries hang from, and its own entry count.
+          chain: { ...chain, length: entries.length },
         };
       });
     },
@@ -705,10 +764,8 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
       return view(await mustLoad({ paymentId: c.paymentId }));
     },
 
-    async verifyLedger() {
-      // Adapters return the exact hashed payloadJson; re-serializing is only a fallback for adapters that do not.
-      const entries = (await storage.ledger()) as Array<LedgerEntry & { payloadJson?: string }>;
-      return verifyEntries(entries.map((e) => ({ ...e, payloadJson: e.payloadJson ?? JSON.stringify(e.payload ?? null) })));
+    verifyLedger() {
+      return checkChain();
     },
 
     withPrincipal(p) {

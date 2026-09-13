@@ -67,3 +67,28 @@ export function resolveLaunch(argv: readonly string[], env: LaunchEnv): LaunchMo
   if (url || apiKey) throw new UsageError("remote mode needs both PAYFIREWALL_URL and PAYFIREWALL_API_KEY");
   throw new UsageError("no configuration: set PAYFIREWALL_URL and PAYFIREWALL_API_KEY, or pass --config <module>");
 }
+
+/**
+ * Wraps fetch for remote mode so a rejected API key or an unreachable PAYFIREWALL_URL is reported once per kind
+ * through `log`. Tool results still carry the fixed error envelope; responses and errors pass through unchanged.
+ */
+export function reportingFetch(log: (message: string) => void, inner: typeof fetch): typeof fetch {
+  const reported = new Set<string>();
+  const once = (kind: string, message: string) => {
+    if (reported.has(kind)) return;
+    reported.add(kind);
+    log(message);
+  };
+  return async (input, init) => {
+    let res: Response;
+    try {
+      res = await inner(input, init);
+    } catch (err) {
+      once("network", `could not reach PAYFIREWALL_URL: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    }
+    // Only 401: a 403 or 404 can also be an engine answer (a payment this key cannot see, an operator-only action).
+    if (res.status === 401) once("auth", "PAYFIREWALL_API_KEY was rejected (HTTP 401)");
+    return res;
+  };
+}

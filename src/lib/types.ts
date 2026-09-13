@@ -108,6 +108,8 @@ export type ChallengeView = NonNullable<Verification["challenge"]>;
 export interface Snapshot {
   environment: string;
   demoMode: DemoMode;
+  /** "scripted" when no ElevenLabs agent is configured (or DEMO_MODE=cache): browser voice calls are the local script. */
+  voiceAgent: "elevenlabs" | "scripted";
   rail: { name: PaymentRail; note?: string };
   payments: Payment[];
   vendors: Vendor[];

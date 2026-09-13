@@ -41,6 +41,8 @@ export function maskPhone(phone: string): string {
 
 export const callbackPhoneOf = (c: CaseRecord): string | null => c.vendorSnapshot.verifiedPhone ?? c.risk?.verifiedCallbackPhone ?? null;
 
+const LEVEL_WORD = { LOW: "Low", ELEVATED: "Elevated", CRITICAL: "Critical" } as const;
+
 const beat = (kind: TimelineKind, text: string, pace = 0): TimelineBeat => ({ kind, text, pace });
 
 const cachedTag = (origin: string, note?: string) => (origin === "fixture" ? `  [cached${note ? `: ${note}` : ""}]` : "");
@@ -73,7 +75,7 @@ function probeBeats(e: Extract<EngineEvent, { type: "probe" }>, c: CaseRecord): 
       : `▶ Tavily  resolving real entity … no registry match for ${legalName}${tag}`, 1));
     out.push(linked
       ? beat("probe", `▶ Tavily  ${domain} is linked to the registered entity`, 0.6)
-      : beat("warn", `▶ Tavily  ${domain} is NOT linked to ${legalName} in any registry source`, 0.6));
+      : beat("warn", `▶ Tavily  ${domain} is not linked to ${legalName} in any registry source`, 0.6));
   }
 
   const phone = find(e.signals, "verified_phone");
@@ -95,7 +97,8 @@ function challengeOpened(c: CaseRecord, channel: string): TimelineBeat {
   if (channel === "human_approval") {
     return beat("call", `☎ Challenge  confirmation link sent to an approver, who calls the ${legalName} controller at ${phone}`, 1);
   }
-  if (channel === "voice_browser") return beat("call", `☎ Challenge  out-of-band call to ${legalName} controller at ${phone}`, 1);
+  // voice_browser runs in the operator's browser (operator_session assurance), so it is never called out of band here.
+  if (channel === "voice_browser") return beat("call", `☎ Challenge  browser voice call to the ${legalName} controller at ${phone}`, 1);
   return beat("call", `☎ Challenge  ${channel} confirmation opened with the ${legalName} controller at ${phone}`, 1);
 }
 
@@ -104,23 +107,23 @@ function frozenBeats(c: CaseRecord, ctx: FormatContext): TimelineBeat[] {
   const out: TimelineBeat[] = [];
   switch (c.reason) {
     case "VENDOR_DENIED_CHANGE":
-      out.push(beat("alert", `■ Vendor controller DENIED the change — ${amount} QUARANTINED`));
+      out.push(beat("alert", `■ Vendor controller denied the change — ${amount} frozen`));
       break;
     case "CHALLENGE_EXPIRED":
-      out.push(beat("alert", `■ Challenge expired without an answer — failing closed, ${amount} QUARANTINED`));
+      out.push(beat("alert", `■ Confirmation expired without an answer — failing closed, ${amount} frozen`));
       break;
     case "NO_CHALLENGE_CHANNEL":
       out.push(beat("call", `☎ Challenge  no verified number — escalate to manual review`, 1));
-      out.push(beat("alert", `■ No independent channel to confirm the change — ${amount} QUARANTINED`));
+      out.push(beat("alert", `■ No independent channel to confirm the change — ${amount} frozen`));
       break;
     case "BLOCKED_BY_PRINCIPAL":
-      out.push(beat("alert", `■ Payment frozen by ${c.challenge?.resolvedBy ?? "request"} — ${amount} QUARANTINED`));
+      out.push(beat("alert", `■ Payment frozen by ${c.challenge?.resolvedBy ?? "request"} — ${amount} held`));
       break;
     case "BENEFICIARY_PREVIOUSLY_DENIED":
-      out.push(beat("alert", `■ Beneficiary ••${c.payment.beneficiary.accountLast4} was previously denied for ${c.vendorSnapshot.legalName} — ${amount} QUARANTINED`));
+      out.push(beat("alert", `■ Beneficiary ••${c.payment.beneficiary.accountLast4} was previously denied for ${c.vendorSnapshot.legalName} — ${amount} frozen`));
       break;
     default:
-      out.push(beat("alert", `■ Challenge inconclusive — failing closed, ${amount} QUARANTINED`));
+      out.push(beat("alert", `■ Confirmation inconclusive — failing closed, ${amount} frozen`));
   }
   if (ctx.railFrozenNote) out.push(beat("ok", `■ ${ctx.railFrozenNote}`));
   return out;
@@ -139,14 +142,14 @@ export function formatEvent(e: EngineEvent, ctx: FormatContext): TimelineBeat[] 
         out.push(beat("ok", `✔ Beneficiary matches vendor master (••${c.vendorSnapshot.knownBankLast4}) — released`));
         return out;
       }
-      out.push(beat("alert", `⚠ ${describeMismatch(e.mismatches[0])} — release HELD`));
+      out.push(beat("alert", `⚠ ${describeMismatch(e.mismatches[0])} — release held`));
       for (const m of e.mismatches.slice(1)) out.push(beat("warn", `⚠ ${describeMismatch(m)}`));
       return out;
     }
     case "probe":
       return probeBeats(e, c);
     case "risk":
-      return [beat("risk", `● RISK: ${e.risk.level} (score ${e.risk.score})`, 1)];
+      return [beat("risk", `● ${LEVEL_WORD[e.risk.level]} risk, score ${e.risk.score}`, 1)];
     case "challenge":
       return e.status === "OPEN" ? [challengeOpened(c, e.channel)] : [];
     case "rail": {

@@ -1,7 +1,36 @@
 {
   "name": "payfirewall-mcp",
   "version": "0.1.0",
-  "description": "MCP server exposing the PayFirewall requester tools (verify_payment, get_verification, block_payment).",
+  "description": "MCP server for PayFirewall: gives AI agents verify_payment, get_verification and block_payment so no vendor payment goes out before the payee is verified out-of-band.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "payments",
+    "payment-verification",
+    "agentic-payments",
+    "ai-agents",
+    "tool-calling",
+    "claude",
+    "anthropic",
+    "openai",
+    "fraud-prevention",
+    "business-email-compromise",
+    "bec",
+    "accounts-payable",
+    "audit-log",
+    "fintech"
+  ],
+  "homepage": "https://github.com/roshaninfordham/sentinelpay/tree/main/packages/mcp#readme",
+  "bugs": {
+    "url": "https://github.com/roshaninfordham/sentinelpay/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/roshaninfordham/sentinelpay.git",
+    "directory": "packages/mcp"
+  },
+  "author": "Roshan Sharma",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -16,7 +45,9 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public",
@@ -25,22 +56,18 @@
     },
     "exports": {
       ".": {
-        "import": {
-          "types": "./dist/index.d.ts",
-          "default": "./dist/index.js"
-        },
-        "require": {
-          "types": "./dist/index.d.cts",
-          "default": "./dist/index.cjs"
-        }
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
       },
       "./package.json": "./package.json"
     }
   },
   "scripts": {
+    "start": "tsx src/bin.ts",
     "test": "tsx --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "tsup src/index.ts src/bin.ts --format esm,cjs --dts --clean --out-dir dist"
+    "build": "../engine/node_modules/.bin/tsup",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

@@ -18,6 +18,8 @@ export function browserVoiceChallenger(client: Client, opts: { operatorAuth: boo
     assurance: "operator_session",
     // True only when /api/voice/token requires operator authentication; createEngine refuses production otherwise.
     operatorAuth: opts.operatorAuth,
+    // The agent never says the new account's digits; the vendor reads them back, and a mismatch denies (SEC-07).
+    requireReadBack: true,
     // A call needs an independently verified number; without one the engine fails closed (NO_CHALLENGE_CHANNEL).
     canHandle: ({ callbackPhone }) => callbackPhone !== null,
     async start(req) {
