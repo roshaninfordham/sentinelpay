@@ -58,3 +58,14 @@ test("rail readBeneficiary throwing yields a BENEFICIARY_CHANGED mismatch with c
   assert.deepEqual(v.mismatches, [{ code: "BENEFICIARY_CHANGED", onFile: "4471", claimed: "unknown" }]);
   assert.equal(v.beneficiary.strength, "last4");
 });
+
+test("a known routing number catches a same-last4 account at a different bank", () => {
+  const vendor = { ...MERIDIAN, knownRoutingNumber: "071000013" };
+  const sameBank = stored(clean({ beneficiary: { accountLast4: "4471", routingNumber: "071000013" } }));
+  assert.deepEqual(evaluateGate(sameBank, vendor), []);
+  const otherBank = stored(clean({ beneficiary: { accountLast4: "4471", routingNumber: "121000248" } }));
+  assert.deepEqual(evaluateGate(otherBank, vendor), [{ code: "BENEFICIARY_CHANGED", onFile: "4471 at routing ••0013", claimed: "4471 at routing ••0248" }]);
+  // No routing on file or none supplied: last4 decides, as before.
+  assert.deepEqual(evaluateGate(otherBank, MERIDIAN), []);
+  assert.deepEqual(evaluateGate(stored(clean({ beneficiary: { accountLast4: "4471" } })), vendor), []);
+});

@@ -37,6 +37,8 @@ export interface PaymentInput {
 export interface Vendor {
   id: string; legalName: string; knownDomain: string; knownBankLast4: string;
   knownAccountFingerprint?: string;
+  /** ABA routing number of the account on file. When set and a payment supplies one, a different bank is a change. */
+  knownRoutingNumber?: string;
   verifiedPhone?: string;
   verifiedPhoneProvenance?: "vendor_master" | "registry";
 }

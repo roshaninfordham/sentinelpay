@@ -2374,6 +2374,9 @@
               "knownAccountFingerprint": {
                 "type": "string"
               },
+              "knownRoutingNumber": {
+                "type": "string"
+              },
               "verifiedPhone": {
                 "type": "string"
               },
@@ -3998,6 +4001,9 @@
                     "type": "string"
                   },
                   "knownAccountFingerprint": {
+                    "type": "string"
+                  },
+                  "knownRoutingNumber": {
                     "type": "string"
                   },
                   "verifiedPhone": {

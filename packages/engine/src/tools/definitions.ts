@@ -221,7 +221,7 @@ export const receiptSchema: JSONSchema7 = obj({
   verification: verificationSchema,
   vendor: obj({
     id: str(), legalName: str(), knownDomain: str(), knownBankLast4: str(),
-    knownAccountFingerprint: str(), verifiedPhone: str(),
+    knownAccountFingerprint: str(), knownRoutingNumber: str(), verifiedPhone: str(),
     verifiedPhoneProvenance: str({ enum: ["vendor_master", "registry"] }),
   }, ["id", "legalName", "knownDomain", "knownBankLast4"]),
   entries: arr(obj({
