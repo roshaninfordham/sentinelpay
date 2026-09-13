@@ -128,7 +128,7 @@ test("retryRelease never releases after beneficiary drift", async () => {
   const rail = spyRail(() => storage.ledger(), "4471");
   const s = setup({ storage, rail });
   rail.setBeneficiary("4471");
-  const read = rail.readBeneficiary.bind(rail);
+  const read = rail.readBeneficiary!.bind(rail);
   let reads = 0;
   rail.readBeneficiary = async (p) => (++reads === 1 ? read(p) : { accountLast4: "0000" });
   const v = await s.engine.verify(clean());
