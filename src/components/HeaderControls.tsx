@@ -17,15 +17,18 @@ interface Health {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export function environmentLabel(snap: Pick<Snapshot, "environment" | "demoMode" | "rail">): string {
+type EnvironmentSnap = Pick<Snapshot, "environment" | "demoMode" | "rail" | "voiceAgent">;
+
+export function environmentLabel(snap: EnvironmentSnap): string {
   return [
     cap(snap.environment),
-    snap.demoMode === "cache" ? "Offline fixtures" : "Live data",
-    snap.rail.name === "column" ? "Column sandbox rail" : "Mock rail",
+    snap.demoMode === "cache" ? "Recorded fixtures" : "Live evidence",
+    snap.voiceAgent === "elevenlabs" ? "Live voice" : "Scripted call",
+    snap.rail.name === "column" ? "Column sandbox" : "Mock rail",
   ].join(" · ");
 }
 
-export function EnvironmentChip({ snap }: { snap: Pick<Snapshot, "environment" | "demoMode" | "rail"> }) {
+export function EnvironmentChip({ snap }: { snap: EnvironmentSnap }) {
   const [health, setHealth] = useState<Health | null>(null);
   const production = snap.environment === "production";
 
@@ -65,6 +68,14 @@ export function EnvironmentChip({ snap }: { snap: Pick<Snapshot, "environment" |
             <Row k="Storage" v={health.storage} />
           </>
         )}
+        <Row
+          k="Vendor call"
+          v={
+            snap.voiceAgent === "elevenlabs"
+              ? "Live ElevenLabs voice agent. If it cannot connect, a scripted call with the same tools runs instead and is labeled scripted."
+              : "Scripted call with the same freeze and approve tools as the live agent. No voice agent is configured."
+          }
+        />
         <Row
           k="Rail"
           v={
