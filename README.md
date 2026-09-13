@@ -449,7 +449,7 @@ The dashboard header always shows the active mode: **Mock rail / Column sandbox 
 
 On this rail the engine reads the beneficiary from Column's counterparty record before the gate, and again before release. A cleared payment creates a sandbox wire, whose id is logged in the ledger (`RAIL_RELEASED`) and on the receipt. A frozen payment never calls the wire endpoint.
 
-> **Status:** the Column adapter follows Column's published docs and is covered by stubbed-HTTP tests, but it has **not yet been run against a real `test_` key**. Three details are inferred rather than confirmed by the docs we could reach: the `GET /counterparties/{id}` path, the `GET /entities` response shape, and the `Idempotency-Key` header. Expect small fixes on first run.
+> **Status: verified against the real Column sandbox (2026-09-13).** `pnpm column:setup` created the payer entity, a funded AP account and addressed counterparties; the rail read the beneficiaries (••9821, ••2208); a release created a real sandbox wire, and a replay with the same `Idempotency-Key` returned the same wire. On the live deployment, a vendor denial left the account's outgoing wire count unchanged. First-run fixes: Column requires a beneficiary address for wires, only printable ASCII in wire text fields, and time for the funding wire to settle; the setup script and adapter now handle all three.
 
 ## 11. API reference
 
@@ -585,7 +585,7 @@ Judges ask. Here are straight answers.
 | ElevenLabs voice agent | **Real integration** (token route, WebRTC session, client tools). Without keys, a scripted call with browser speech drives the identical tools, and the receipt labels it scripted. The agent never says the new account's digits; the vendor reads them back and a mismatch freezes the wire. Assurance tier: `operator_session`, because the operator's browser places the call. |
 | Approval links | **Real challenger and responder page**, but delivery is `APPROVAL_DELIVERY=log`: the link is printed to the server log, which is only acceptable in sandbox and is refused in production. A production deployment needs a real delivery channel. |
 | Production approvals | **Not ready yet.** Production requires an authenticated approver session to authorize through a link, and the app has API-key principals only; until approver sessions exist, production challenges can only be denied or expire. The operator console has no sign-in either, so production serves it only as a notice and its routes only to operator API keys. |
-| Payment rail | **No rail** by default (PayFirewall decides, the demo pays nothing) or the **Column sandbox** adapter. The Column adapter is implemented and unit-tested against stubbed HTTP but not yet run with a real sandbox key (see [§10](#enable-the-column-sandbox-rail)). In production the bank or AP system honors the hold. |
+| Payment rail | **No rail** by default (PayFirewall decides, the demo pays nothing) or the **Column sandbox** rail, which the live deployment uses. Verified with a real sandbox key: releases create real sandbox wires, replays are idempotent, and frozen payments create none (see [§10](#enable-the-column-sandbox-rail)). In production the bank or AP system honors the hold. |
 | AP disbursement feed | Seeded scenario plus the `/api/webhook` ingest endpoint |
 
 ## 16. Roadmap
