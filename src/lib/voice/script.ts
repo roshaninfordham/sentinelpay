@@ -12,7 +12,7 @@ export interface ScriptVars {
 }
 
 // The agent never says the new account's digits: if the vendor confirms, the vendor reads them back.
-export function challengeScript(v: ScriptVars, vendorAnswer: "deny" | "authorize", beneficiaryLast4: string): ScriptLine[] {
+export function challengeScript(v: ScriptVars, vendorAnswer: "deny" | "authorize", beneficiaryLast4?: string): ScriptLine[] {
   const opening: ScriptLine = {
     speaker: "agent",
     text: `Hi, this is Alex with the SentinelPay settlement desk, calling for ${v.payer}'s accounts payable team. We received a request to change the bank account for a ${v.amount} payment to ${v.vendor}, and before any money moves we confirm changes like this directly with you. Did your team ask for that change?`,
@@ -22,6 +22,13 @@ export function challengeScript(v: ScriptVars, vendorAnswer: "deny" | "authorize
       opening,
       { speaker: "vendor", text: "No, we didn't. Our account hasn't changed. That sounds like fraud." },
       { speaker: "agent", text: "Thank you for telling me. The payment is on hold and no money will move. You may have just stopped a fraud attempt, and their accounts payable team will follow up with your usual contact. Goodbye." },
+    ];
+  }
+  if (!beneficiaryLast4) {
+    return [
+      opening,
+      { speaker: "vendor", text: "I think so, but I don't have the new account details in front of me." },
+      { speaker: "agent", text: "No problem. Since we can't confirm it right now, the payment stays on hold and no money moves. Their accounts payable team will follow up with your usual contact. Thanks, goodbye." },
     ];
   }
   return [

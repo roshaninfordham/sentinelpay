@@ -22,8 +22,8 @@ interface TokenResponse {
   reason?: string;
   challengeId: string;
   responderToken: string;
-  /** For the scripted vendor only; never sent to the voice provider. */
-  beneficiaryLast4: string;
+  /** Only on scripted (simulated) tokens, for the scripted vendor; a live token never carries it. */
+  beneficiaryLast4?: string;
   conversationToken?: string;
   dynamicVariables: { amount: string; vendor: string; payer: string } & Record<string, string>;
 }
@@ -132,9 +132,12 @@ export function CallConsole({
         const spoken = say(line, voiceOn);
         // The tool fires as the agent announces the decision — mid-call, like the live agent.
         if (last) {
-          const tool = vendorAnswer === "deny" ? "freeze_payment" : "approve_payment";
+          // Without the digits (a live token that fell back) the scripted vendor cannot read back, so the call freezes.
+          const canAuthorize = vendorAnswer === "authorize" && !!token.beneficiaryLast4;
           await wait(700);
-          await submitDecision(ctx(startedAt, token), tool, vendorAnswer === "deny" ? "DENIED" : "AUTHORIZED", token.beneficiaryLast4);
+          if (vendorAnswer === "deny") await submitDecision(ctx(startedAt, token), "freeze_payment", "DENIED");
+          else if (canAuthorize) await submitDecision(ctx(startedAt, token), "approve_payment", "AUTHORIZED", token.beneficiaryLast4);
+          else await submitDecision(ctx(startedAt, token), "freeze_payment", "INCONCLUSIVE");
         }
         await spoken;
         setSpeaking(null);
