@@ -357,3 +357,14 @@ test("requestSourceDomain must be a bare hostname, so prompt text cannot ride in
   const v = await s.engine.verify(poisoned({ id: "pay_dom_ok", requestSourceDomain: "Meridian-Global.CO" }));
   assert.equal(v.untrusted.requestSourceDomain, "meridian-global.co");
 });
+
+test("resubmitting the same payment with a different routing number is an IDEMPOTENCY_CONFLICT", async () => {
+  const s = setup();
+  await s.engine.verify(poisoned({ beneficiary: { accountLast4: "9821", routingNumber: "071000013" } }));
+  await assert.rejects(s.engine.verify(poisoned({ beneficiary: { accountLast4: "9821", routingNumber: "121000248" } })),
+    (e: EngineError) => e.code === "IDEMPOTENCY_CONFLICT");
+  // Without a routing number the request fingerprint is unchanged from earlier versions.
+  const t = setup();
+  await t.engine.verify(poisoned());
+  assert.equal((await t.engine.verify(poisoned())).paymentId, "pay_240k");
+});

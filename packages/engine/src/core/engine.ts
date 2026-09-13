@@ -148,6 +148,8 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
       p.vendorId, p.amountCents, p.currency,
       p.beneficiary.accountLast4, p.beneficiary.accountFingerprint ?? "", p.beneficiary.railCounterpartyId ?? "",
       p.requestSourceDomain, p.invoiceContactPhone ?? "",
+      // Appended only when present, so fingerprints of cases stored before routing was compared stay identical.
+      ...(p.beneficiary.routingNumber ? [p.beneficiary.routingNumber] : []),
     ]));
 
   /**
