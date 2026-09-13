@@ -131,6 +131,7 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
                 vendor={vendor}
                 assessment={assessment}
                 call={call}
+                challenge={snap.challenges[payment.id]}
                 onDecided={refresh}
               />
             </ConversationProvider>

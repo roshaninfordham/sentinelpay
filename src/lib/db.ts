@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS vendors (
   knownDomain TEXT NOT NULL,
   knownBankLast4 TEXT NOT NULL,
   verifiedPhone TEXT,
+  verifiedPhoneProvenance TEXT,
   registryUrl TEXT
 );
 CREATE TABLE IF NOT EXISTS payments (
@@ -59,13 +60,13 @@ CREATE TABLE IF NOT EXISTS timeline (
   text TEXT NOT NULL,
   ts TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS assessments (
-  paymentId TEXT PRIMARY KEY,
-  json TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS calls (
-  paymentId TEXT PRIMARY KEY,
-  json TEXT NOT NULL
+-- Server-only plaintext responder tokens for open voice_browser challenges (operator_session assurance).
+-- Rows are deleted when the challenge resolves or expires; the engine itself stores only the token hash.
+CREATE TABLE IF NOT EXISTS voice_sessions (
+  challengeId TEXT PRIMARY KEY,
+  paymentId TEXT NOT NULL,
+  responderToken TEXT NOT NULL,
+  expiresAt TEXT NOT NULL
 );
 `;
 
@@ -90,9 +91,12 @@ export function getDb(): Promise<Client> {
 
 // Additive column migrations for databases created by earlier versions.
 async function migrate(client: Client): Promise<void> {
-  const cols = new Set(rowsOf<{ name: string }>(await client.execute(`PRAGMA table_info(payments)`)).map((c) => c.name));
-  for (const col of ["railCounterpartyId", "railReference"]) {
-    if (!cols.has(col)) await client.execute(`ALTER TABLE payments ADD COLUMN ${col} TEXT`);
+  const additive: Record<string, string[]> = { payments: ["railCounterpartyId", "railReference"], vendors: ["verifiedPhoneProvenance"] };
+  for (const [table, columns] of Object.entries(additive)) {
+    const cols = new Set(rowsOf<{ name: string }>(await client.execute(`PRAGMA table_info(${table})`)).map((c) => c.name));
+    for (const col of columns) {
+      if (!cols.has(col)) await client.execute(`ALTER TABLE ${table} ADD COLUMN ${col} TEXT`);
+    }
   }
 }
 

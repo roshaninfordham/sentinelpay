@@ -5,9 +5,14 @@ import type { CallOutcome, Verdict } from "../types";
 // dashboard (see agent.config.md) — registering them only here is not enough for the call to fire.
 
 export type ToolName = NonNullable<CallOutcome["toolInvoked"]>;
+export type FreezeOutcome = "denied" | "inconclusive";
 
 export interface DecisionContext {
   paymentId: string;
+  /** From /api/voice/token for the open voice_browser challenge. */
+  challengeId: string;
+  /** Held in browser memory only; sent solely to authorize. Never given to the voice provider. */
+  responderToken: string;
   startedAt: number;
   transcript: () => string;
   onDecided?: (tool: ToolName, verdict: Verdict) => void;
@@ -19,6 +24,8 @@ export async function submitDecision(ctx: DecisionContext, tool: ToolName, verdi
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       paymentId: ctx.paymentId,
+      challengeId: ctx.challengeId,
+      ...(verdict === "AUTHORIZED" ? { responderToken: ctx.responderToken } : {}),
       verdict,
       toolInvoked: tool,
       transcript: ctx.transcript(),
@@ -31,13 +38,15 @@ export async function submitDecision(ctx: DecisionContext, tool: ToolName, verdi
   return `Payment ${ctx.paymentId} is now ${body.payment?.status}.`;
 }
 
-/** Tool handlers for `startSession({ clientTools })`. Verdict comes from which tool the agent calls. */
+/**
+ * Tool handlers for `startSession({ clientTools })`. The verdict comes from which tool the agent calls and, for
+ * freeze_payment, from the structured `outcome` enum; free text is never parsed. Anything other than exactly
+ * "denied" freezes as INCONCLUSIVE, so a malformed call still fails closed.
+ */
 export function createClientTools(ctx: DecisionContext) {
   return {
-    freeze_payment: async (params: { reason?: string }) => {
-      const verdict: Verdict = /inconclusive|unclear|unreachable|unable/i.test(params?.reason ?? "") ? "INCONCLUSIVE" : "DENIED";
-      return submitDecision(ctx, "freeze_payment", verdict);
-    },
+    freeze_payment: async (params: { outcome?: unknown; reason?: string }) =>
+      submitDecision(ctx, "freeze_payment", params?.outcome === "denied" ? "DENIED" : "INCONCLUSIVE"),
     approve_payment: async () => submitDecision(ctx, "approve_payment", "AUTHORIZED"),
   };
 }
@@ -51,8 +60,15 @@ export const TOOL_SCHEMA = [
       "Quarantine the pending wire. Call when the vendor controller denies authorizing the bank change, cannot confirm it, or the call is otherwise inconclusive.",
     parameters: {
       type: "object",
-      properties: { reason: { type: "string", description: "Short reason, e.g. 'controller denied the change' or 'inconclusive'." } },
-      required: ["reason"],
+      properties: {
+        outcome: {
+          type: "string",
+          enum: ["denied", "inconclusive"] satisfies FreezeOutcome[],
+          description: "\"denied\" when the controller says the change was not authorized; \"inconclusive\" for anything else.",
+        },
+        reason: { type: "string", description: "Short note for the audit record. Not used to decide the outcome." },
+      },
+      required: ["outcome"],
     },
     expects_response: true,
   },

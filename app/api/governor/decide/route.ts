@@ -1,4 +1,5 @@
 import { decide, GovernorError } from "@/lib/governor";
+import { legacyError } from "@/lib/legacy-response";
 import type { CallOutcome, Verdict } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -6,10 +7,14 @@ export const dynamic = "force-dynamic";
 const VERDICTS: Verdict[] = ["AUTHORIZED", "DENIED", "INCONCLUSIVE"];
 const TOOLS: NonNullable<CallOutcome["toolInvoked"]>[] = ["approve_payment", "freeze_payment"];
 
+// Legacy decision route. DENIED/INCONCLUSIVE work as before; AUTHORIZED requires the open challenge's
+// challengeId + responderToken (handed to the operator's browser by /api/voice/token).
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     paymentId?: string;
     verdict?: Verdict;
+    challengeId?: unknown;
+    responderToken?: unknown;
     transcript?: string;
     toolInvoked?: CallOutcome["toolInvoked"];
     durationSec?: number;
@@ -25,13 +30,15 @@ export async function POST(req: Request) {
       await decide({
         paymentId: body.paymentId,
         verdict: body.verdict,
+        challengeId: typeof body.challengeId === "string" ? body.challengeId : undefined,
+        responderToken: typeof body.responderToken === "string" ? body.responderToken : undefined,
         transcript: typeof body.transcript === "string" ? body.transcript.slice(0, 20000) : undefined,
         toolInvoked: body.toolInvoked ?? null,
         durationSec: Number(body.durationSec) || 0,
       }),
     );
   } catch (err) {
-    const status = err instanceof GovernorError ? err.status : 404;
-    return Response.json({ error: (err as Error).message }, { status });
+    if (err instanceof GovernorError) return Response.json({ error: err.message }, { status: err.status });
+    return legacyError(err, 404);
   }
 }

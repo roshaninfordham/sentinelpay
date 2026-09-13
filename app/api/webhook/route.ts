@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { investigate } from "@/lib/forensics";
 import { runGate } from "@/lib/gate";
+import { legacyError } from "@/lib/legacy-response";
 import { paymentSource } from "@/lib/providers";
 import type { Payment } from "@/lib/types";
 
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 // Forensics runs in after(); give it room for live RDAP + Tavily calls and audience pacing.
 export const maxDuration = 60;
 
-// Mock ERP/AP disbursement event. Accepts a Payment-shaped body, ingests it as RECEIVED, runs the gate.
+// Mock ERP/AP disbursement event. Accepts a Payment-shaped body, ingests it as RECEIVED, runs engine.verify().
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Partial<Payment> | null;
   const required = ["id", "vendorId", "amountCents", "claimedBankLast4", "requestSourceDomain"] as const;
@@ -41,6 +42,6 @@ export async function POST(req: Request) {
     if (result.investigate) after(() => investigate(payment.id).catch((e) => console.error("[investigate]", e)));
     return Response.json(result, { status: 202 });
   } catch (err) {
-    return Response.json({ error: (err as Error).message }, { status: 422 });
+    return legacyError(err, 422);
   }
 }

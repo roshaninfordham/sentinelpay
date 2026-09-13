@@ -1,11 +1,9 @@
-// Core contracts — single source of truth (ARCHITECTURE §3).
-// Every slice imports from here. Never redefine these locally.
+// App-side contracts. Engine vocabulary (states, verdicts, risk levels, challenge view) comes from
+// @sentinelpay/engine; the shapes below are the dashboard's legacy wire format kept for one release.
 
-export type PaymentStatus =
-  | "RECEIVED" | "PENDING_REVIEW" | "INVESTIGATING"
-  | "CHALLENGING" | "QUARANTINED" | "CLEARED";
+import type { PaymentStatus, RiskLevel, Verdict, Verification } from "@sentinelpay/engine";
 
-export type RiskLevel = "LOW" | "ELEVATED" | "CRITICAL";
+export type { PaymentStatus, RiskLevel, Verdict };
 
 export interface Vendor {
   id: string;
@@ -33,11 +31,13 @@ export interface Payment {
   railReference?: string;         // rail transfer id, set only when the wire is actually released
 }
 
+// Looser than the engine's ForensicSignal (origin optional) so pre-engine callers keep compiling.
 export interface ForensicSignal {
-  key: "domain_age_days" | "entity_match" | "verified_phone" | "adverse_media" | "sanctions_hit";
+  key: "domain_age_days" | "entity_match" | "verified_phone" | "adverse_media" | "sanctions_hit" | "probe_error";
   // domain_age_days is null when the registry has no record for the domain
   value: string | number | boolean | null;
-  source: "rdap" | "tavily" | "opensanctions";
+  source: string;
+  origin?: "live" | "fixture";
   detail?: string;                // human-readable line for the terminal
 }
 
@@ -47,9 +47,9 @@ export interface RiskAssessment {
   signals: ForensicSignal[];
   verifiedCallbackPhone?: string; // the number the voice agent must dial
   rationale: string;              // one paragraph, plain English
+  reasons?: string[];
+  policyVersion?: string;
 }
-
-export type Verdict = "AUTHORIZED" | "DENIED" | "INCONCLUSIVE";
 
 export interface CallOutcome {
   paymentId: string;
@@ -103,7 +103,10 @@ export interface TimelineLine {
   ts: string;
 }
 
+export type ChallengeView = NonNullable<Verification["challenge"]>;
+
 export interface Snapshot {
+  environment: string;
   demoMode: DemoMode;
   rail: { name: PaymentRail; note?: string };
   payments: Payment[];
@@ -111,6 +114,7 @@ export interface Snapshot {
   timeline: TimelineLine[];
   assessments: Record<string, RiskAssessment>;
   calls: Record<string, CallOutcome>;
+  challenges: Record<string, ChallengeView>;
   ledger: LedgerEntry[];
   chain: { ok: boolean; brokenAt?: number };
 }

@@ -41,11 +41,11 @@ Rules:
 - Do not reveal internal risk scores or forensic findings.
 - If the person clearly says the change was NOT authorized, or says they don't recognize it:
   say "Understood. I'm freezing the wire now and generating a forensic report." and call freeze_payment
-  with reason "controller denied the change".
+  with outcome "denied".
 - If the person clearly and explicitly confirms they authorized the new account ending {{newLast4}}:
   say you are releasing the payment and call approve_payment.
 - If the answer is ambiguous after one clarifying question, or the person cannot confirm, or asks you to
-  call a different number: call freeze_payment with reason "inconclusive". Default to freezing.
+  call a different number: call freeze_payment with outcome "inconclusive". Default to freezing.
 - After calling a tool, thank them and end the call.
 ```
 
@@ -54,12 +54,18 @@ Mirrors `TOOL_SCHEMA` in `tools.ts`. Enable **Wait for response**.
 
 ### `freeze_payment`
 - Description: Quarantine the pending wire. Call when the vendor controller denies authorizing the bank change, cannot confirm it, or the call is otherwise inconclusive.
-- Parameters: `reason` (string, required) — short reason, e.g. "controller denied the change" or "inconclusive".
+- Parameters:
+  - `outcome` (string, **required**, enum `denied` | `inconclusive`): `denied` when the controller says the change was not authorized; `inconclusive` for anything else. The app decides the verdict from this enum only; free text is never parsed, and any other value freezes as inconclusive.
+  - `reason` (string, optional): short note for the audit record. Not used to decide the outcome.
 
 ### `approve_payment`
 - Description: Release the pending wire. Call ONLY after the controller explicitly confirms their treasury team authorized the new account ending {{newLast4}}.
 - Parameters: none.
 
 ## Governance
-The tool call only *requests* a decision. `POST /api/governor/decide` enforces state: authorization is only
-accepted from `CHALLENGING`, terminal states are immutable, and every decision is hash-chained in the ledger.
+The tool call only *requests* a decision. `POST /api/governor/decide` hands it to the SentinelPay engine:
+- `approve_payment` is accepted only with the open challenge's `challengeId` and responder token, which
+  `/api/voice/token` gives to the operator's browser (never to the agent: they are not dynamic variables).
+  This channel's assurance tier is `operator_session`; in production the token route requires operator auth.
+- `freeze_payment` needs no token: moving toward a frozen payment is always allowed.
+- Terminal states are immutable, and every decision is hash-chained in the ledger.

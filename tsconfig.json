@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@sentinelpay/engine": ["./packages/engine/src/index.ts"],
+      "@sentinelpay/engine/*": ["./packages/engine/src/*"]
     }
   },
   "include": [

@@ -58,6 +58,14 @@ export default async function IncidentPage({ params }: PageProps<"/incident/[id]
         {r.call && (
           <Section title="Out-of-band challenge">
             <Row k="Verdict" v={r.call.verdict} />
+            {r.verification?.challenge && (
+              <>
+                <Row k="Challenge" v={`${r.verification.challenge.challengeId} via ${r.verification.challenge.channel}`} />
+                <Row k="Assurance" v={assuranceLabel(r.verification.challenge.assurance, r.environment)} />
+                <Row k="Resolved by" v={r.verification.challenge.resolvedBy ?? "expired (failed closed)"} />
+                <Row k="Reason" v={r.verification.reason} />
+              </>
+            )}
             <Row k="Tool invoked" v={r.call.toolInvoked ?? "none"} />
             <Row k="Duration" v={`${r.call.durationSec}s`} />
             {r.call.transcript && (
@@ -110,6 +118,13 @@ export default async function IncidentPage({ params }: PageProps<"/incident/[id]
       </article>
     </main>
   );
+}
+
+const ASSURANCE: Record<string, string> = { operator_session: "operator session", out_of_band: "out of band", test: "test only" };
+
+function assuranceLabel(assurance: string, environment: string): string {
+  const label = ASSURANCE[assurance] ?? assurance;
+  return environment === "production" ? label : `${label} (${environment})`;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

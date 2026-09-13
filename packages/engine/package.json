@@ -1,0 +1,71 @@
+{
+  "name": "@sentinelpay/engine",
+  "version": "0.1.0",
+  "description": "Fail-closed verification for vendor bank-change payments: gate, forensics, out-of-band challenge, hash-chained ledger.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./tools": "./src/tools/index.ts",
+    "./http": "./src/http/index.ts",
+    "./client": "./src/http/client.ts",
+    "./testing": "./src/testing/index.ts",
+    "./adapters/memory": "./src/adapters/memory.ts",
+    "./adapters/libsql": "./src/adapters/libsql.ts",
+    "./adapters/rdap": "./src/adapters/rdap.ts",
+    "./adapters/tavily": "./src/adapters/tavily.ts",
+    "./adapters/fixtures": "./src/adapters/fixtures.ts",
+    "./adapters/column": "./src/adapters/column.ts",
+    "./adapters/elevenlabs": "./src/adapters/elevenlabs.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": { "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }, "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" } },
+      "./tools": { "import": { "types": "./dist/tools/index.d.ts", "default": "./dist/tools/index.js" }, "require": { "types": "./dist/tools/index.d.cts", "default": "./dist/tools/index.cjs" } },
+      "./http": { "import": { "types": "./dist/http/index.d.ts", "default": "./dist/http/index.js" }, "require": { "types": "./dist/http/index.d.cts", "default": "./dist/http/index.cjs" } },
+      "./client": { "import": { "types": "./dist/http/client.d.ts", "default": "./dist/http/client.js" }, "require": { "types": "./dist/http/client.d.cts", "default": "./dist/http/client.cjs" } },
+      "./testing": { "import": { "types": "./dist/testing/index.d.ts", "default": "./dist/testing/index.js" }, "require": { "types": "./dist/testing/index.d.cts", "default": "./dist/testing/index.cjs" } },
+      "./adapters/memory": { "import": { "types": "./dist/adapters/memory.d.ts", "default": "./dist/adapters/memory.js" }, "require": { "types": "./dist/adapters/memory.d.cts", "default": "./dist/adapters/memory.cjs" } },
+      "./adapters/libsql": { "import": { "types": "./dist/adapters/libsql.d.ts", "default": "./dist/adapters/libsql.js" }, "require": { "types": "./dist/adapters/libsql.d.cts", "default": "./dist/adapters/libsql.cjs" } },
+      "./adapters/rdap": { "import": { "types": "./dist/adapters/rdap.d.ts", "default": "./dist/adapters/rdap.js" }, "require": { "types": "./dist/adapters/rdap.d.cts", "default": "./dist/adapters/rdap.cjs" } },
+      "./adapters/tavily": { "import": { "types": "./dist/adapters/tavily.d.ts", "default": "./dist/adapters/tavily.js" }, "require": { "types": "./dist/adapters/tavily.d.cts", "default": "./dist/adapters/tavily.cjs" } },
+      "./adapters/fixtures": { "import": { "types": "./dist/adapters/fixtures.d.ts", "default": "./dist/adapters/fixtures.js" }, "require": { "types": "./dist/adapters/fixtures.d.cts", "default": "./dist/adapters/fixtures.cjs" } },
+      "./adapters/column": { "import": { "types": "./dist/adapters/column.d.ts", "default": "./dist/adapters/column.js" }, "require": { "types": "./dist/adapters/column.d.cts", "default": "./dist/adapters/column.cjs" } },
+      "./adapters/elevenlabs": { "import": { "types": "./dist/adapters/elevenlabs.d.ts", "default": "./dist/adapters/elevenlabs.js" }, "require": { "types": "./dist/adapters/elevenlabs.d.cts", "default": "./dist/adapters/elevenlabs.cjs" } },
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "test": "tsx --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsup src/index.ts src/tools/index.ts src/http/index.ts src/http/client.ts src/testing/index.ts src/adapters/*.ts --format esm,cjs --dts --clean --out-dir dist --external @libsql/client",
+    "lint:package": "publint && attw --pack ."
+  },
+  "peerDependencies": {
+    "@libsql/client": "^0.18.0"
+  },
+  "peerDependenciesMeta": {
+    "@libsql/client": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@libsql/client": "^0.18.0",
+    "@types/node": "^20",
+    "ajv": "^8.20.0",
+    "publint": "^0.3.24",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5"
+  }
+}

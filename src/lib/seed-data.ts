@@ -1,5 +1,5 @@
 import type { Payment, Vendor } from "./types";
-import { getDb } from "./db";
+import { getRuntime } from "./engine";
 
 // The one scenario the whole demo hangs on (CLAUDE.md §Seed data),
 // plus a clean control payment that the gate releases untouched.
@@ -53,10 +53,11 @@ export function seedPayments(now = Date.now()): Payment[] {
 
 /** Wipes all state and writes the demo scenario. Used by `pnpm seed` and the reset button. */
 export async function reseed(): Promise<void> {
-  const db = await getDb();
+  // The runtime creates the engine's cases table, so it must exist before it is cleared.
+  const { client: db } = await getRuntime();
   await db.batch(
     [
-      ...["timeline", "assessments", "calls", "ledger", "payments", "vendors"].map((t) => `DELETE FROM ${t}`),
+      ...["timeline", "voice_sessions", "cases", "ledger", "payments", "vendors"].map((t) => `DELETE FROM ${t}`),
       `DELETE FROM sqlite_sequence WHERE name = 'timeline'`,
       ...VENDORS.map((v) => ({
         sql: `INSERT INTO vendors (id, legalName, knownDomain, knownBankLast4, verifiedPhone, registryUrl) VALUES (?, ?, ?, ?, ?, ?)`,

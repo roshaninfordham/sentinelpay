@@ -16,20 +16,24 @@ export interface ColumnSandboxConfig {
 
 export const COLUMN_CONFIG_PATH = path.join(process.cwd(), ".column-sandbox.json");
 
-export function loadColumnConfig(): ColumnSandboxConfig | null {
-  // On Vercel there is no local file: `pnpm column:setup` prints this JSON for the COLUMN_SANDBOX_CONFIG env var.
-  if (process.env.COLUMN_SANDBOX_CONFIG) {
+/**
+ * Reads the sandbox object ids: inline JSON first (Vercel's COLUMN_SANDBOX_CONFIG, since there is no local file),
+ * then the file written by `pnpm column:setup`. The caller supplies both; this module never reads env.
+ */
+export function loadColumnConfig(source: { json?: string; file?: string }): ColumnSandboxConfig | null {
+  if (source.json) {
     try {
-      return JSON.parse(process.env.COLUMN_SANDBOX_CONFIG) as ColumnSandboxConfig;
+      return JSON.parse(source.json) as ColumnSandboxConfig;
     } catch {
       console.error("[sentinelpay] COLUMN_SANDBOX_CONFIG is not valid JSON");
       return null;
     }
   }
-  const file = process.env.COLUMN_CONFIG_PATH ?? COLUMN_CONFIG_PATH;
-  if (!existsSync(file)) return null;
+  const file = source.file ?? COLUMN_CONFIG_PATH;
+  // Local development only (Vercel uses the inline JSON), so the file is kept out of output tracing.
+  if (!existsSync(/*turbopackIgnore: true*/ file)) return null;
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as ColumnSandboxConfig;
+    return JSON.parse(readFileSync(/*turbopackIgnore: true*/ file, "utf8")) as ColumnSandboxConfig;
   } catch {
     return null;
   }

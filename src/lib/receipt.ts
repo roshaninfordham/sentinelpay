@@ -1,5 +1,5 @@
-import { one } from "./db";
-import { readAssessment } from "./forensics";
+import type { CaseRecord, ChallengeEvidence, Verification } from "@sentinelpay/engine";
+import { APP_OPERATOR, getRuntime } from "./engine";
 import { readLedger, verifyChain } from "./ledger";
 import { paymentSource, vendorDirectory } from "./providers";
 import type { CallOutcome, LedgerEntry, Payment, RiskAssessment, Vendor } from "./types";
@@ -11,29 +11,49 @@ export interface IncidentReceipt {
   vendor: Vendor;
   assessment?: RiskAssessment;
   call?: CallOutcome;
+  /** The engine's view of the case; absent only for a payment that never reached the gate. */
+  verification?: Verification;
+  environment: string;
   entries: LedgerEntry[];
   headHash: string | null;      // hash of this payment's final ledger entry
   chain: { ok: boolean; brokenAt?: number; length: number };
 }
 
-export async function readCall(paymentId: string): Promise<CallOutcome | undefined> {
-  const row = await one<{ json: string }>(`SELECT json FROM calls WHERE paymentId = ?`, [paymentId]);
-  return row ? (JSON.parse(row.json) as CallOutcome) : undefined;
+/** The legacy call record, derived from the resolved challenge and the evidence the responder channel sent. */
+export function callOutcomeOf(c: CaseRecord): CallOutcome | undefined {
+  const ch = c.challenge;
+  if (!ch || ch.status === "OPEN") return undefined;
+  const evidence = (ch.evidence ?? {}) as ChallengeEvidence;
+  return {
+    paymentId: c.paymentId,
+    verdict: ch.verdict ?? "INCONCLUSIVE", // an expired challenge has no verdict: it failed closed
+    transcript: evidence.transcript ?? "",
+    toolInvoked: evidence.tool ?? null,
+    durationSec: Math.max(0, Math.round(evidence.durationSec ?? 0)),
+  };
 }
 
+// Compatibility shim over engine.receipt(), in the dashboard's IncidentReceipt shape.
 export async function buildReceipt(paymentId: string): Promise<IncidentReceipt> {
+  const { engine, loadCase, settings } = await getRuntime();
+  const started = await loadCase({ paymentId });
+  const receipt = started ? await engine.receipt(paymentId, { principal: APP_OPERATOR }) : null;
+  const c = started ? await loadCase({ paymentId }) : null;
+
   const payment = await paymentSource().get(paymentId);
   const vendor = await vendorDirectory().get(payment.vendorId);
-  const entries = await readLedger(paymentId);
+  const entries: LedgerEntry[] = receipt ? receipt.entries : await readLedger(paymentId);
   return {
-    incidentId: `INC-${paymentId.toUpperCase()}-${entries[0]?.seq ?? 0}`,
-    generatedAt: new Date().toISOString(),
+    incidentId: receipt?.incidentId ?? `INC-${paymentId.toUpperCase()}-0`,
+    generatedAt: receipt?.generatedAt ?? new Date().toISOString(),
     payment,
     vendor,
-    assessment: await readAssessment(paymentId),
-    call: await readCall(paymentId),
+    assessment: c?.risk,
+    call: c ? callOutcomeOf(c) : undefined,
+    verification: receipt?.verification,
+    environment: settings.environment,
     entries,
     headHash: entries.at(-1)?.entryHash ?? null,
-    chain: await verifyChain(),
+    chain: receipt?.chain ?? (await verifyChain()),
   };
 }

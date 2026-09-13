@@ -1,9 +1,10 @@
-import { appendLedger } from "./ledger";
-import { paymentSource, vendorDirectory } from "./providers";
-import { emit } from "./timeline";
-import type { PaymentStatus } from "./types";
+import type { PaymentInput, Verification } from "@sentinelpay/engine";
+import { getRuntime } from "./engine";
+import { paymentSource } from "./providers";
+import { describeMismatch } from "./timeline-format";
+import type { Payment, PaymentStatus } from "./types";
 
-// Node 1 — interception & policy gate (ARCHITECTURE §4).
+// Compatibility shim: Node 1 (interception & policy gate) is engine.verify() over the payments row.
 
 export interface GateResult {
   paymentId: string;
@@ -12,40 +13,34 @@ export interface GateResult {
   investigate: boolean;   // caller schedules forensics when true
 }
 
-const usd = (cents: number) => (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+export function toPaymentInput(p: Payment): PaymentInput {
+  return {
+    id: p.id,
+    vendorId: p.vendorId,
+    amountCents: p.amountCents,
+    currency: "USD",
+    beneficiary: { accountLast4: p.claimedBankLast4, ...(p.railCounterpartyId ? { railCounterpartyId: p.railCounterpartyId } : {}) },
+    requestSourceDomain: p.requestSourceDomain,
+    ...(p.invoiceContactPhone ? { invoiceContactPhone: p.invoiceContactPhone } : {}),
+    ...(p.memo ? { memo: p.memo } : {}),
+  };
+}
+
+const toGateResult = (v: Pick<Verification, "paymentId" | "state" | "mismatches">): GateResult => ({
+  paymentId: v.paymentId,
+  status: v.state,
+  mismatches: v.mismatches.map(describeMismatch),
+  investigate: v.state === "PENDING_REVIEW",
+});
 
 export async function runGate(paymentId: string): Promise<GateResult> {
-  const source = paymentSource();
-  const payment = await source.get(paymentId);
-  if (payment.status !== "RECEIVED") {
-    return { paymentId, status: payment.status, mismatches: [], investigate: false };
-  }
-  const vendor = await vendorDirectory().get(payment.vendorId);
+  const { engine, loadCase } = await getRuntime();
+  // An existing case is never re-submitted: the payments row now mirrors the rail's beneficiary, so a second
+  // verify would look like a changed request (409). The case already holds the gate's answer.
+  const existing = await loadCase({ paymentId });
+  if (existing) return toGateResult(existing);
 
-  await emit(paymentId, "info", `→ Release requested: ${usd(payment.amountCents)} to ${vendor.legalName}`);
-
-  const mismatches: string[] = [];
-  if (payment.claimedBankLast4 !== vendor.knownBankLast4) {
-    mismatches.push(`Beneficiary changed: ••${vendor.knownBankLast4} → ••${payment.claimedBankLast4}`);
-  }
-  if (payment.requestSourceDomain.toLowerCase() !== vendor.knownDomain.toLowerCase()) {
-    mismatches.push(`Request domain ${payment.requestSourceDomain} ≠ vendor of record ${vendor.knownDomain}`);
-  }
-
-  if (mismatches.length === 0) {
-    await source.setStatus(paymentId, "CLEARED");
-    await appendLedger("CLEARED", paymentId, { reason: "beneficiary and request domain match vendor master" });
-    await emit(paymentId, "ok", `✔ Beneficiary matches vendor master (••${vendor.knownBankLast4}) — released`);
-    return { paymentId, status: "CLEARED", mismatches, investigate: false };
-  }
-
-  await source.setStatus(paymentId, "PENDING_REVIEW");
-  await appendLedger("INTERCEPTED", paymentId, {
-    mismatches,
-    onFile: { bankLast4: vendor.knownBankLast4, domain: vendor.knownDomain },
-    claimed: { bankLast4: payment.claimedBankLast4, domain: payment.requestSourceDomain },
-  });
-  await emit(paymentId, "alert", `⚠ ${mismatches[0]} — release HELD`);
-  for (const m of mismatches.slice(1)) await emit(paymentId, "warn", `⚠ ${m}`);
-  return { paymentId, status: "PENDING_REVIEW", mismatches, investigate: true };
+  const payment = await paymentSource().get(paymentId);
+  if (payment.status !== "RECEIVED") return { paymentId, status: payment.status, mismatches: [], investigate: false };
+  return toGateResult(await engine.verify(toPaymentInput(payment)));
 }

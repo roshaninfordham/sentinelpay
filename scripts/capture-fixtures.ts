@@ -2,7 +2,7 @@
 // Usage: TAVILY_API_KEY=tvly-... pnpm capture   (reads .env.local if present)
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { queriesFor } from "../src/lib/forensics/tavily";
+import { queriesFor } from "@sentinelpay/engine/adapters/tavily";
 import { seedPayments, VENDORS } from "../src/lib/seed-data";
 
 const root = path.join(__dirname, "..");

@@ -18,8 +18,8 @@ if (existsSync(path.join(root, ".env.local"))) {
 }
 
 async function main() {
-  const client = ColumnClient.fromEnv();
-  if (!client) throw new Error("Set COLUMN_API_KEY (sandbox key, starts with test_) in .env.local");
+  if (!process.env.COLUMN_API_KEY) throw new Error("Set COLUMN_API_KEY (sandbox key, starts with test_) in .env.local");
+  const client = new ColumnClient(process.env.COLUMN_API_KEY);
 
   let entityId = process.env.COLUMN_ENTITY_ID;
   if (!entityId) {
