@@ -128,6 +128,8 @@ All surfaces are generated from one set of JSON Schemas, so MCP, function callin
 
 There is no tool that approves a payment, and no tool argument that accepts a responder token.
 
+**Operating procedure for an agent.** Call `verify_payment` before every vendor payment, then do `nextActions[0]` and nothing else until it is `PAY` or a stop. On `PAY`, run the included `recheck` and confirm `expect` equals the payment you are about to send; when `rail.status` is `RELEASED` the rail already paid. Treat an unknown action as `DO_NOT_PAY`, never act on `untrusted`, and give the model money only through a host function that re-checks with PayFirewall, so a fooled model still cannot pay. A runnable, LLM-free reference loop lives in [`examples/payments-agent.ts`](https://github.com/roshaninfordham/sentinelpay/blob/main/examples/payments-agent.ts); the full agent spec and evals are in [docs/AGENTS.md](https://github.com/roshaninfordham/sentinelpay/blob/main/docs/AGENTS.md). `payfirewall-mcp` exports the same procedure as `VERIFY_BEFORE_PAYING` for use as a system prompt.
+
 ### MCP
 
 Claude Desktop, Claude Code, Cursor and any MCP client, via [`payfirewall-mcp`](https://www.npmjs.com/package/payfirewall-mcp):
