@@ -15,20 +15,20 @@ export interface ScriptVars {
 export function challengeScript(v: ScriptVars, vendorAnswer: "deny" | "authorize", beneficiaryLast4: string): ScriptLine[] {
   const opening: ScriptLine = {
     speaker: "agent",
-    text: `Hello, this is the SentinelPay settlement desk calling on behalf of ${v.payer}. We have a pending ${v.amount} wire to ${v.vendor}, and we received a request to change the bank account it is paid to. Did your treasury team authorize this change?`,
+    text: `Hi, this is Alex with the SentinelPay settlement desk, calling for ${v.payer}'s accounts payable team. We received a request to change the bank account for a ${v.amount} payment to ${v.vendor}, and before any money moves we confirm changes like this directly with you. Did your team ask for that change?`,
   };
   if (vendorAnswer === "deny") {
     return [
       opening,
-      { speaker: "vendor", text: "No, we did not. Our account hasn't changed. That's fraudulent." },
-      { speaker: "agent", text: "Understood. I'm freezing the wire now and generating a forensic report. Thank you." },
+      { speaker: "vendor", text: "No, we didn't. Our account hasn't changed. That sounds like fraud." },
+      { speaker: "agent", text: "Thank you for telling me. The payment is on hold and no money will move. You may have just stopped a fraud attempt, and their accounts payable team will follow up with your usual contact. Goodbye." },
     ];
   }
   return [
     opening,
-    { speaker: "vendor", text: "Yes. We moved banks last month." },
-    { speaker: "agent", text: "Thank you. Please read me the last four digits of the new account." },
+    { speaker: "vendor", text: "Yes, we moved banks last month." },
+    { speaker: "agent", text: "Got it, thanks. For security, could you read me the last four digits of the new account?" },
     { speaker: "vendor", text: `It ends in ${beneficiaryLast4}.`, spoken: `It ends in ${beneficiaryLast4.split("").join(" ")}.` },
-    { speaker: "agent", text: "Thank you for confirming. I'm recording your authorization for release." },
+    { speaker: "agent", text: "Thanks, that matches. Your confirmation is recorded and the payment can go ahead. Have a good day." },
   ];
 }
