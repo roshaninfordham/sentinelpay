@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { Payment, PaymentStatus, RiskAssessment, Vendor } from "@/lib/types";
 import { rationaleText, usd } from "./format";
-import { FrozenBand, ResolutionShield, type FreezeContext } from "./ResolutionShield";
+import { FrozenBand, type FreezeContext } from "./FreezeStamp";
 import { StatusPill } from "./StatusPill";
+
+// The animated stamp pulls in framer-motion, so it loads only once a wire is being verified (see the preload below).
+const loadShield = () => import("./ResolutionShield");
+const ResolutionShield = lazy(() => loadShield().then((m) => ({ default: m.ResolutionShield })));
 
 const STAGES = ["Verify requested", "Held", "Investigated", "Vendor confirmation", "Outcome"] as const;
 
@@ -38,6 +42,14 @@ const PRIMARY_LABEL: Record<PaymentStatus, string> = {
   CLEARED: "Released",
 };
 
+export interface RailOutcome {
+  /** Transfer id the rail returned for the released wire. */
+  reference?: string;
+  status?: string;
+  /** Why the rail created no wire after the release was decided. */
+  error?: string;
+}
+
 const RISK_TONE = { LOW: "text-cleared", ELEVATED: "text-brass", CRITICAL: "text-signal" } as const;
 
 export function WireTicket({
@@ -45,6 +57,7 @@ export function WireTicket({
   vendor,
   assessment,
   freeze,
+  rail,
   busy,
   onRelease,
 }: {
@@ -53,6 +66,8 @@ export function WireTicket({
   assessment?: RiskAssessment;
   /** Why and how the wire froze, for the stamp and its explanation. */
   freeze: FreezeContext;
+  /** The configured payment rail and what it did on release. */
+  rail: RailOutcome & { name: string };
   busy: boolean;
   onRelease: () => void;
 }) {
@@ -74,6 +89,13 @@ export function WireTicket({
     setSeen({ id: payment.id, status: payment.status });
   }
   const overlay = frozen && stamping;
+
+  // Warm the stamp while the case is open, so the freeze lands without a fetch. If it has not loaded, the band
+  // below still shows the frozen state.
+  const verifying = ACTIVE[payment.status] !== undefined;
+  useEffect(() => {
+    if (verifying) loadShield().catch(() => undefined);
+  }, [verifying]);
 
   const band = useRef<HTMLAnchorElement>(null);
   const dismissed = useRef(false);
@@ -226,6 +248,8 @@ export function WireTicket({
           </div>
         </div>
 
+        {cleared && <RailLine rail={rail} />}
+
         {assessment && !cleared && (
           <p className="border-t border-rule px-4 py-3 text-sm text-muted sm:px-5 md:px-7">{rationaleText(assessment.rationale)}</p>
         )}
@@ -234,17 +258,47 @@ export function WireTicket({
       </div>
 
       {overlay && (
-        <ResolutionShield
-          payment={payment}
-          context={freeze}
-          onDismiss={() => {
-            dismissed.current = true;
-            setStamping(false);
-          }}
-        />
+        <Suspense fallback={null}>
+          <ResolutionShield
+            payment={payment}
+            context={freeze}
+            onDismiss={() => {
+              dismissed.current = true;
+              setStamping(false);
+            }}
+          />
+        </Suspense>
       )}
     </article>
   );
+}
+
+/** After a release: the rail's wire reference, or a plain statement that no wire exists. */
+function RailLine({ rail }: { rail: RailOutcome & { name: string } }) {
+  const column = rail.name === "column";
+  if (rail.reference) {
+    return (
+      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-rule px-4 py-3 text-sm sm:px-5 md:px-7">
+        <span className="text-cleared">{column ? "Column sandbox wire created" : "Wire created"}</span>
+        <span className="break-all font-mono text-[13px] text-paper">{rail.reference}</span>
+        {rail.status && <span className="text-muted">{rail.status.toLowerCase()}</span>}
+      </p>
+    );
+  }
+  if (rail.error) {
+    return (
+      <p className="border-t border-brass/50 bg-brass/10 px-4 py-3 text-sm sm:px-5 md:px-7">
+        <span className="font-medium text-brass">Verified, but no wire was created.</span>{" "}
+        <span className="text-paper">
+          {column ? "Column" : "The rail"} refused the transfer ({rail.error}). No money moved; release it again through SentinelPay, never outside it.
+        </span>
+      </p>
+    );
+  }
+  if (!column) {
+    return <p className="border-t border-rule px-4 py-3 text-sm text-muted sm:px-5 md:px-7">Mock rail: the release is recorded, and no money moves in this environment.</p>;
+  }
+  return <p className="border-t border-rule px-4 py-3 text-sm text-muted sm:px-5 md:px-7">Sending to the Column sandbox…</p>;
 }
 
 function Detail({ term, value, changed }: { term: string; value: React.ReactNode; changed?: boolean }) {
