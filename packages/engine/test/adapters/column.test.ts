@@ -171,3 +171,14 @@ test("engine + columnRail: counterparty edited at Column after CLEARED -> no wir
   const railError = (await storage.ledger()).find((e) => e.event === "RAIL_ERROR");
   assert.deepEqual(railError?.payload, { reason: "RAIL_BENEFICIARY_DRIFT", verifiedLast4: "4471", railLast4: "9821" });
 });
+
+test("release sends a printable-ASCII wire description (Column rejects other characters)", async () => {
+  const { fetch, calls } = columnStub({});
+  await rail(fetch).release(clean({ memo: "INV-20931 · drayage, Port of Seattle — café “rush”" }), { idempotencyKey: "payfirewall-pay_18k" });
+  const description = new URLSearchParams(wires(calls)[0].body).get("description")!;
+  assert.match(description, /^[\x20-\x7E]+$/);
+  assert.equal(description, "INV-20931 drayage, Port of Seattle cafe rush");
+  const emptyAfterCleaning = columnStub({});
+  await rail(emptyAfterCleaning.fetch).release(clean({ id: "pay_18k", memo: "···" }), { idempotencyKey: "payfirewall-pay_18k" });
+  assert.equal(new URLSearchParams(wires(emptyAfterCleaning.calls)[0].body).get("description"), "PayFirewall pay_18k");
+});

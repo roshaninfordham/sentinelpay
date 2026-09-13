@@ -25,6 +25,12 @@ export interface ColumnRailOptions {
   fetch?: typeof fetch;
 }
 
+/** Column accepts only printable ASCII in wire text fields; accents fold to base letters and anything else becomes a space. */
+export function wireDescription(memo: string | undefined, paymentId: string): string {
+  const ascii = (memo ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
+  return (ascii || `PayFirewall ${paymentId}`).slice(0, 140);
+}
+
 export function columnRail(opts: ColumnRailOptions): Rail {
   // This package must never move real money: only sandbox keys are accepted.
   if (typeof opts.apiKey !== "string" || !opts.apiKey.startsWith("test_")) {
@@ -81,7 +87,7 @@ export function columnRail(opts: ColumnRailOptions): Rail {
         bank_account_id: opts.bankAccountId,
         counterparty_id: counterpartyFor(p),
         amount: p.amountCents,
-        description: (p.memo ?? `PayFirewall ${p.id}`).slice(0, 140),
+        description: wireDescription(p.memo, p.id),
       }, idempotencyKey);
       // Never report a reference the rail did not return.
       if (!wire.id) throw new Error("Column wire response has no id");
