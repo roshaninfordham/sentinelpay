@@ -25,7 +25,10 @@ async function main() {
   if (!entityId) {
     const { entities = [] } = await client.listEntities();
     entityId = entities[0]?.id;
-    if (!entityId) throw new Error("No entity found. Create one in the Column dashboard (sandbox) or set COLUMN_ENTITY_ID.");
+    if (!entityId) {
+      entityId = (await client.createBusinessEntity({ business_name: "Acme Corp (SentinelPay sandbox payer)", website: "https://sentinelpay-sigma.vercel.app" })).id;
+      console.log("created sandbox payer entity");
+    }
   }
   console.log(`entity        ${entityId}`);
 
@@ -33,11 +36,18 @@ async function main() {
   console.log(`bank account  ${account.id}`);
 
   await client.simulateReceiveWire({ destination_account_number_id: account.default_account_number_id, amount: 100_000_000 });
-  console.log(`funded        $1,000,000.00 (simulated incoming wire)`);
+  // The simulated wire settles asynchronously; releasing before it lands fails with "not enough funds".
+  for (let attempt = 0; ; attempt++) {
+    const { balances } = await client.getBankAccount(account.id);
+    if ((balances?.available_amount ?? 0) >= 100_000_000) break;
+    if (attempt >= 20) throw new Error("simulated funding wire did not settle within 40s");
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  console.log(`funded        $1,000,000.00 (simulated incoming wire, settled)`);
 
   const vendorCounterparties: Record<string, string> = {};
   for (const [vendorId, v] of Object.entries(SANDBOX_ACCOUNTS.vendors)) {
-    const cp = await client.createCounterparty({ routing_number: SANDBOX_ACCOUNTS.routing, account_number: v.account, name: v.name, description: v.description });
+    const cp = await client.createCounterparty({ routing_number: SANDBOX_ACCOUNTS.routing, account_number: v.account, name: v.name, description: v.description, address: SANDBOX_ACCOUNTS.addresses[v.address] });
     vendorCounterparties[vendorId] = cp.id;
     console.log(`counterparty  ${cp.id}  ${v.name} ••${v.account.slice(-4)} (on file)`);
   }
@@ -48,7 +58,7 @@ async function main() {
       paymentCounterparties[paymentId] = vendorCounterparties[p.vendor];
       continue;
     }
-    const cp = await client.createCounterparty({ routing_number: SANDBOX_ACCOUNTS.routing, account_number: p.account, name: p.name, description: p.description });
+    const cp = await client.createCounterparty({ routing_number: SANDBOX_ACCOUNTS.routing, account_number: p.account, name: p.name, description: p.description, address: SANDBOX_ACCOUNTS.addresses[p.address] });
     paymentCounterparties[paymentId] = cp.id;
     console.log(`counterparty  ${cp.id}  ${p.name} ••${p.account.slice(-4)} (from invoice ${paymentId})`);
   }

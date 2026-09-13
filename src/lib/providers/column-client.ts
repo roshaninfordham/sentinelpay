@@ -52,16 +52,52 @@ export class ColumnClient {
     return json;
   }
 
-  createCounterparty(input: { routing_number: string; account_number: string; name: string; description?: string }) {
+  /** Wires need a beneficiary name and address on the counterparty; Column rejects the wire otherwise. */
+  createCounterparty(input: {
+    routing_number: string;
+    account_number: string;
+    name: string;
+    description?: string;
+    address: { line_1: string; city: string; state: string; postal_code: string; country_code: string };
+  }) {
+    const { address, ...rest } = input;
     return this.request<ColumnCounterparty>("POST", "/counterparties", {
       routing_number_type: "aba",
       account_type: "checking",
-      ...input,
+      ...rest,
+      // Form-encoded nested fields use bracket notation, as in Column's curl examples.
+      ...Object.fromEntries(Object.entries(address).map(([k, v]) => [`address[${k}]`, v])),
     });
   }
 
   createBankAccount(input: { entity_id: string; description: string }) {
     return this.request<ColumnBankAccount>("POST", "/bank-accounts", input);
+  }
+
+  /** Sandbox payer entity for fresh sandboxes. Column auto-verifies sandbox entities. JSON body, per Column's docs. */
+  async createBusinessEntity(input: { business_name: string; website: string }) {
+    const res = await fetch(`${this.base}/entities/business`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`:${this.apiKey}`).toString("base64")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...input,
+        ein: "123456789",
+        legal_type: "corporation",
+        industry: "Software",
+        address: { line_1: "1 Market Street", city: "San Francisco", state: "CA", postal_code: "94105", country_code: "US" },
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const json = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+    if (!res.ok || !json.id) throw new ColumnError(`Column POST /entities/business → ${res.status} ${json.message ?? ""}`.trim(), res.status);
+    return json as { id: string };
+  }
+
+  getBankAccount(id: string) {
+    return this.request<ColumnBankAccount & { balances?: { available_amount: number } }>("GET", `/bank-accounts/${encodeURIComponent(id)}`);
   }
 
   listEntities() {

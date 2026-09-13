@@ -83,6 +83,7 @@ test("extractFindings golden: fixtures/tavily.json for the poisoned payment", ()
     entityResolved: true,
     entitySources: ["opencorporates.com", "bloomberg.com", "sec.gov"],
     verifiedPhone: REGISTRY_PHONE,
+    phoneSources: ["opencorporates.com", "bloomberg.com", "sec.gov"],
     requestDomainLinked: false,
     adverseMedia: null,
   });
@@ -101,7 +102,11 @@ test("extractFindings: the invoice number never becomes the verified phone, and 
   const withInvoice = extractFindings(MERIDIAN, poisoned({ invoiceContactPhone: "+1 (415) 555-0100" }), entity, domain);
   assert.equal(withInvoice.verifiedPhone, null);
   assert.equal(withInvoice.adverseMedia, "security.example: Lookalike alert");
-  assert.equal(extractFindings(MERIDIAN, poisoned(), entity, domain).verifiedPhone, "(415) 555-0100");
+  const found = extractFindings(MERIDIAN, poisoned(), entity, domain);
+  assert.equal(found.verifiedPhone, "(415) 555-0100");
+  // Provenance is only the registry pages that cited the chosen number, never the non-registry page that mentions the vendor.
+  assert.deepEqual(found.phoneSources, ["opencorporates.com", "bloomberg.com"]);
+  assert.ok(found.entitySources.includes("pastebin.example"));
 });
 
 test("tavily live: Bearer auth, registry include_domains, signals with origin live, registry contactCandidate", async () => {

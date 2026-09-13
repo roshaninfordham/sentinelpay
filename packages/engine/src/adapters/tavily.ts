@@ -14,6 +14,7 @@ export interface TavilyFindings {
   entityResolved: boolean;              // registry sources mention the vendor's legal name
   entitySources: string[];              // hostnames that corroborated it
   verifiedPhone: string | null;         // most-cited phone across registry results
+  phoneSources: string[];               // registry hosts that cited verifiedPhone (its provenance)
   requestDomainLinked: boolean;         // any source ties requestSourceDomain to the entity
   adverseMedia: string | null;          // first result flagging the request domain as suspicious
 }
@@ -44,12 +45,15 @@ export function extractFindings(
 
   const entityHits = entity.results.filter((r) => `${r.title} ${r.content}`.toLowerCase().includes(nameCore));
   const counts = new Map<string, number>();
+  const citedBy = new Map<string, Set<string>>();
   for (const r of entityHits) {
-    if (!onDomain(host(r.url), registryDomains)) continue;
+    const h = host(r.url);
+    if (!onDomain(h, registryDomains)) continue;
     for (const m of r.content.matchAll(PHONE_RE)) {
       const d = `${m[1]}${m[2]}${m[3]}`;
       if (d === invoiceDigits || d.startsWith("000")) continue;
       counts.set(d, (counts.get(d) ?? 0) + 1);
+      citedBy.set(d, (citedBy.get(d) ?? new Set()).add(h));
     }
   }
   const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -64,6 +68,7 @@ export function extractFindings(
     entityResolved: entityHits.length > 0,
     entitySources: [...new Set(entityHits.map((r) => host(r.url)))],
     verifiedPhone: best ? formatPhone(best) : null,
+    phoneSources: best ? [...(citedBy.get(best) ?? [])] : [],
     requestDomainLinked: linked,
     adverseMedia: adverse ? `${host(adverse.url)}: ${adverse.title}` : null,
   };
@@ -88,14 +93,15 @@ export function tavilyResult(vendor: Vendor, payment: PaymentFacts, f: TavilyFin
     },
     {
       key: "verified_phone", value: f.verifiedPhone ?? false, source: "tavily", origin,
-      detail: f.verifiedPhone ? `registry line ${f.verifiedPhone}` : "no registry phone found",
+      detail: f.verifiedPhone ? `registry line ${f.verifiedPhone} (${f.phoneSources.join(", ")})` : "no registry phone found",
     },
   ];
   if (f.adverseMedia) signals.push({ key: "adverse_media", value: f.adverseMedia, source: "tavily", origin, detail: f.adverseMedia });
   return {
     origin,
     signals,
-    ...(f.verifiedPhone ? { contactCandidate: { phone: f.verifiedPhone, sources: f.entitySources } } : {}),
+    // Provenance is only the registry pages that cited this number, never every page that mentioned the vendor.
+    ...(f.verifiedPhone ? { contactCandidate: { phone: f.verifiedPhone, sources: f.phoneSources } } : {}),
   };
 }
 

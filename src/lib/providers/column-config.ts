@@ -43,13 +43,18 @@ export function loadColumnConfig(source: { json?: string; file?: string }): Colu
 export const SANDBOX_ACCOUNTS = {
   // Wells Fargo ABA routing number; sandbox never contacts the receiving bank.
   routing: "121000248",
+  // Beneficiary addresses are required for wires. Fictional scenario addresses.
+  addresses: {
+    meridian: { line_1: "233 S Wacker Dr", city: "Chicago", state: "IL", postal_code: "60606", country_code: "US" },
+    northwind: { line_1: "1200 Alaskan Way", city: "Seattle", state: "WA", postal_code: "98101", country_code: "US" },
+  },
   vendors: {
-    v_meridian: { account: "300038104471", name: "Meridian Global Logistics LLC", description: "Vendor of record (on file)" },
-    v_northwind: { account: "500045102208", name: "Northwind Freight Partners Inc.", description: "Vendor of record (on file)" },
+    v_meridian: { account: "300038104471", name: "Meridian Global Logistics LLC", description: "Vendor of record (on file)", address: "meridian" },
+    v_northwind: { account: "500045102208", name: "Northwind Freight Partners Inc.", description: "Vendor of record (on file)", address: "northwind" },
   },
   payments: {
     // The poisoned invoice: same payee name, attacker-controlled account ending 9821.
-    pay_240k: { account: "770001939821", name: "Meridian Global Logistics LLC", description: "Beneficiary from INV-88412 remittance update" },
+    pay_240k: { account: "770001939821", name: "Meridian Global Logistics LLC", description: "Beneficiary from INV-88412 remittance update", address: "meridian" },
     pay_18k: { vendor: "v_northwind" },
   },
 } as const;
