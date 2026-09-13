@@ -67,7 +67,7 @@ export function toVerification(
       ...(c.payment.invoiceContactPhone !== undefined ? { invoiceContactPhone: c.payment.invoiceContactPhone } : {}),
       ...(c.payment.memo !== undefined ? { memo: c.payment.memo } : {}),
     },
-    mustNot: mustNotFor(decision),
+    mustNot: mustNotFor(decision, c.rail.status),
     nextActions: nextActionsFor(c),
     proof: { ledgerHeadHash: ledger.headHash, ledgerLength: ledger.length },
     updatedAt: c.updatedAt,

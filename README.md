@@ -15,7 +15,7 @@ payment. Every step is written to a tamper-evident audit trail.
 
 `Fintech / Money Track` · `Best Use of Tavily` · `Best ElevenLabs Project` · `Grand Prize` · `Best Solo Builder`
 
-![Next.js 16](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=fff) ![Tests](https://img.shields.io/badge/tests-220%20passing-46be86) ![npm payfirewall](https://img.shields.io/badge/npm-payfirewall-cb3837?logo=npm) ![MCP](https://img.shields.io/badge/MCP-payfirewall--mcp-6b5bd6) ![License](https://img.shields.io/badge/license-MIT-d6a23e)
+![Next.js 16](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=fff) ![Tests](https://img.shields.io/badge/tests-222%20passing-46be86) ![npm payfirewall](https://img.shields.io/badge/npm-payfirewall-cb3837?logo=npm) ![MCP](https://img.shields.io/badge/MCP-payfirewall--mcp-6b5bd6) ![License](https://img.shields.io/badge/license-MIT-d6a23e)
 
 <img src="docs/images/03-frozen.png" alt="SentinelPay dashboard: a $240,000 wire frozen after the vendor denied the bank change" width="900">
 
@@ -333,7 +333,7 @@ Each case write and its ledger entries commit in one compare-and-set transaction
 | Click → frozen, full demo run | **~30 s** | Browser run. Dominated by the ~23 s voice call and deliberate 0.9 s terminal pacing for the audience |
 | Coverage | **100%** of beneficiary-changed payments | By construction: every gate mismatch is challenged; no sampling |
 | Audit entries per intercepted payment | **6**, hash-chained | `INTERCEPTED → INVESTIGATION_STARTED → FORENSICS → CHALLENGE_STARTED → CALL_RESULT → FROZEN` |
-| Automated tests | **220 passing** | Engine core, adapters, tools, HTTP, MCP server and stdio end to end, app compatibility (see [§13](#13-testing-and-ci)) |
+| Automated tests | **222 passing** | Engine core, adapters, tools, HTTP, MCP server and stdio end to end, app compatibility (see [§13](#13-testing-and-ci)) |
 
 ### Unit economics (estimate)
 
@@ -538,7 +538,7 @@ sentinelpay/
 ## 13. Testing and CI
 
 ```bash
-pnpm test         # 220 tests: app + both packages
+pnpm test         # 222 tests: app + both packages
 pnpm typecheck    # tsc --noEmit
 pnpm lint         # eslint
 pnpm build        # production build
@@ -577,7 +577,7 @@ Judges ask. Here are straight answers.
 
 | Component | Status |
 |---|---|
-| PayFirewall engine: gate, risk policy, state machine, responder tokens, hash-chained ledger, receipts | **Real** and fully implemented, with 220 tests |
+| PayFirewall engine: gate, risk policy, state machine, responder tokens, hash-chained ledger, receipts | **Real** and fully implemented, with 222 tests |
 | `payfirewall` and `payfirewall-mcp` packages | **Real and publish-ready**: built, packed, installed from tarballs and exercised in CI. Not yet published to npm at the time of writing. |
 | MCP server | **Real.** Tested end to end over stdio in embedded mode, and against the HTTP contract in remote mode. |
 | RDAP domain-age lookups | **Real**. `meridianglobal.com` resolves live (registered 1999-02-27). rdap.org has no RDAP server for `.co`, so the lookalike `meridian-global.co` uses a scenario fixture ("72 hours ago", relative to now). |

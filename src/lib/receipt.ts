@@ -46,7 +46,7 @@ export async function buildReceipt(paymentId: string): Promise<IncidentReceipt> 
   const vendor = await vendorDirectory().get(payment.vendorId);
   const entries: LedgerEntry[] = receipt ? receipt.entries : await readLedger(paymentId);
   return {
-    incidentId: receipt?.incidentId ?? `INC-${paymentId.toUpperCase()}-0`,
+    incidentId: receipt?.incidentId ?? `INC-${paymentId.toUpperCase()}`,
     generatedAt: receipt?.generatedAt ?? new Date().toISOString(),
     payment,
     vendor,

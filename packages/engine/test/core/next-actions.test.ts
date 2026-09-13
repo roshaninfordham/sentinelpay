@@ -124,3 +124,10 @@ test("error nextActions: IDEMPOTENCY_CONFLICT and STORAGE_UNAVAILABLE", () => {
   const payment = kase("CLEARED").payment as never;
   assert.deepEqual(errorNextActions("STORAGE_UNAVAILABLE", { payment }).map((a) => a.type), ["DO_NOT_PAY", "RETRY"]);
 });
+
+test("mustNot keeps PAY_OUTSIDE_PAYFIREWALL for PAY whenever a rail is configured", () => {
+  assert.ok(!mustNotFor("PAY", "NOT_CONFIGURED").includes("PAY_OUTSIDE_PAYFIREWALL"));
+  for (const status of ["NOT_SENT", "RELEASED", "FAILED"]) {
+    assert.ok(mustNotFor("PAY", status).includes("PAY_OUTSIDE_PAYFIREWALL"), status);
+  }
+});

@@ -742,7 +742,8 @@
               "requestSourceDomain": {
                 "type": "string",
                 "maxLength": 253,
-                "description": "Domain the invoice or bank-change request came from."
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+                "description": "Hostname the invoice or bank-change request came from, e.g. meridian-global.co."
               },
               "invoiceContactPhone": {
                 "type": "string",
@@ -1507,7 +1508,8 @@
                             "requestSourceDomain": {
                               "type": "string",
                               "maxLength": 253,
-                              "description": "Domain the invoice or bank-change request came from."
+                              "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+                              "description": "Hostname the invoice or bank-change request came from, e.g. meridian-global.co."
                             },
                             "invoiceContactPhone": {
                               "type": "string",
@@ -2261,7 +2263,8 @@
                                 "requestSourceDomain": {
                                   "type": "string",
                                   "maxLength": 253,
-                                  "description": "Domain the invoice or bank-change request came from."
+                                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+                                  "description": "Hostname the invoice or bank-change request came from, e.g. meridian-global.co."
                                 },
                                 "invoiceContactPhone": {
                                   "type": "string",
@@ -3131,7 +3134,8 @@
                                 "requestSourceDomain": {
                                   "type": "string",
                                   "maxLength": 253,
-                                  "description": "Domain the invoice or bank-change request came from."
+                                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+                                  "description": "Hostname the invoice or bank-change request came from, e.g. meridian-global.co."
                                 },
                                 "invoiceContactPhone": {
                                   "type": "string",
@@ -3885,7 +3889,8 @@
                                     "requestSourceDomain": {
                                       "type": "string",
                                       "maxLength": 253,
-                                      "description": "Domain the invoice or bank-change request came from."
+                                      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+                                      "description": "Hostname the invoice or bank-change request came from, e.g. meridian-global.co."
                                     },
                                     "invoiceContactPhone": {
                                       "type": "string",
@@ -4490,7 +4495,8 @@
                                 "requestSourceDomain": {
                                   "type": "string",
                                   "maxLength": 253,
-                                  "description": "Domain the invoice or bank-change request came from."
+                                  "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+                                  "description": "Hostname the invoice or bank-change request came from, e.g. meridian-global.co."
                                 },
                                 "invoiceContactPhone": {
                                   "type": "string",

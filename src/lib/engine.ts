@@ -246,7 +246,7 @@ async function build(): Promise<AppRuntime> {
   const challengers = buildChallengers(settings, client);
   const column = settings.column;
   const rail: Rail | undefined = column
-    ? columnRail({ apiKey: column.apiKey, bankAccountId: column.config.bankAccountId, counterparties: column.config.paymentCounterparties })
+    ? columnRail({ apiKey: column.apiKey, bankAccountId: column.config.bankAccountId, counterparties: column.config.paymentCounterparties, vendorCounterparties: column.config.vendorCounterparties })
     : undefined;
 
   const formatContext = {

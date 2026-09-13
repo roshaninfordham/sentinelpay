@@ -86,13 +86,13 @@ export default {
     "payfirewall": {
       "command": "npx",
       "args": ["-y", "payfirewall-mcp", "--config", "/absolute/path/to/payfirewall.config.mjs"],
-      "env": { "PAYFIREWALL_TOKEN_PEPPER": "at-least-32-random-bytes" }
+      "env": { "PAYFIREWALL_TOKEN_PEPPER": "<output of: openssl rand -base64 48>" }
     }
   }
 }
 ```
 
-`createEngine` still refuses unsafe configuration here: a short pepper, test challengers without `allowTestChallengers`, test challengers in production. `memoryStorage` forgets everything when the client restarts; use `libsqlStorage` for anything you want to keep.
+`createEngine` still refuses unsafe configuration here: a pepper shorter than 32 bytes, test challengers without `allowTestChallengers`, test challengers in production. `memoryStorage` forgets everything when the client restarts; use `libsqlStorage` for anything you want to keep.
 
 ## What the agent gets
 

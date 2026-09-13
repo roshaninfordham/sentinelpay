@@ -97,9 +97,11 @@ export function nextActionsFor(c: CaseRecord): NextAction[] {
   }
 }
 
-export function mustNotFor(decision: Decision): MustNot[] {
-  // Paying through PayFirewall's decision is the point of PAY; every other prohibition still holds.
-  return decision === "PAY" ? MUST_NOT_ALL.filter((m) => m !== "PAY_OUTSIDE_PAYFIREWALL") : [...MUST_NOT_ALL];
+export function mustNotFor(decision: Decision, railStatus?: string): MustNot[] {
+  // Without a rail, PAY means the host pays, so only that prohibition lifts. With a rail configured the rail
+  // pays (or retries); paying outside it could send the money twice, so every prohibition still holds.
+  const hostPays = decision === "PAY" && (railStatus === undefined || railStatus === "NOT_CONFIGURED");
+  return hostPays ? MUST_NOT_ALL.filter((m) => m !== "PAY_OUTSIDE_PAYFIREWALL") : [...MUST_NOT_ALL];
 }
 
 /** nextActions for errors (§5.2). Always starts with DO_NOT_PAY. */

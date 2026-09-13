@@ -1,5 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-import { EngineError, type ChallengeAnswers, type Principal } from "payfirewall";
+import { EngineError, responderTokenMatches, type ChallengeAnswers, type Principal } from "payfirewall";
 import { getRuntime } from "@/lib/engine";
 import { callbackPhoneOf } from "@/lib/timeline-format";
 
@@ -17,13 +16,9 @@ const bearer = (req: Request) => /^Bearer\s+(\S+)\s*$/i.exec(req.headers.get("au
 const invalid = () =>
   Response.json({ error: { code: "RESPONDER_TOKEN_INVALID", message: "responder token is invalid" } }, { status: 401, headers: noStore });
 
-/** Same scheme as the engine's stored hash: SHA-256 hex of pepper + token. */
-function tokenMatches(pepper: string, token: string | undefined, storedHash: string): boolean {
-  if (!token) return false;
-  const presented = Buffer.from(createHash("sha256").update(pepper + token).digest("hex"));
-  const stored = Buffer.from(storedHash);
-  return stored.length === presented.length && timingSafeEqual(presented, stored);
-}
+/** The engine's own constant-time check, so the page can never drift from the stored hash scheme. */
+const tokenMatches = async (pepper: string, token: string | undefined, storedHash: string) =>
+  !!token && (await responderTokenMatches(pepper, token, storedHash));
 
 // What the page shows. Reading does not count toward the token attempt limit and cannot change the payment.
 export async function GET(req: Request, ctx: RouteContext<"/api/approve/[challengeId]">) {
@@ -33,7 +28,7 @@ export async function GET(req: Request, ctx: RouteContext<"/api/approve/[challen
     const { settings, engine, loadCase } = await getRuntime();
     const found = token ? await loadCase({ challengeId }) : null;
     const ch = found?.challenge;
-    if (!found || !ch || ch.channel !== "human_approval" || !tokenMatches(settings.tokenPepper, token, ch.responderTokenHash)) return invalid();
+    if (!found || !ch || ch.channel !== "human_approval" || !(await tokenMatches(settings.tokenPepper, token, ch.responderTokenHash))) return invalid();
     // One lazy engine step enforces expiry before anything is shown as confirmable.
     await engine.advance(found.paymentId).catch(() => undefined);
     const c = (await loadCase({ challengeId })) ?? found;
@@ -81,7 +76,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/approve/[challe
     const token = bearer(req);
     const c = token ? await loadCase({ challengeId }) : null;
     // Same answer for an unknown challenge, another channel and a bad link: no existence oracle.
-    if (!c?.challenge || c.challenge.channel !== "human_approval" || !tokenMatches(settings.tokenPepper, token, c.challenge.responderTokenHash)) return invalid();
+    if (!c?.challenge || c.challenge.channel !== "human_approval" || !(await tokenMatches(settings.tokenPepper, token, c.challenge.responderTokenHash))) return invalid();
     const v = await engine.resolveChallenge({ challengeId, verdict: body.verdict, responder: APPROVAL_PAGE, answers });
     // Only the outcome: a link is not a session, so this route never returns the case itself.
     return Response.json({ decision: v.decision });

@@ -13,7 +13,8 @@
     "test": "tsx --test \"src/**/*.test.ts\" \"packages/*/test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "column:setup": "tsx scripts/column-setup.ts",
-    "test:engine": "tsx --test \"packages/engine/test/**/*.test.ts\""
+    "test:engine": "tsx --test \"packages/engine/test/**/*.test.ts\"",
+    "smoke:pack": "node scripts/pack-smoke.mjs"
   },
   "dependencies": {
     "@elevenlabs/react": "^1.15.2",

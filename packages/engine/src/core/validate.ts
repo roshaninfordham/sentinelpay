@@ -7,6 +7,9 @@ type Obj = Record<string, unknown>;
 
 export const PAYMENT_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
+/** A bare DNS hostname: labels of letters, digits and inner hyphens, at least one dot. */
+export const HOSTNAME = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+
 const invalid = (path: string, message: string) => new EngineError("INVALID_INPUT", message, { path });
 
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -65,7 +68,7 @@ export function validatePaymentInput(raw: unknown): PaymentInput {
       ...optional("routingNumber", routingNumber),
       ...optional("railCounterpartyId", railCounterpartyId),
     },
-    requestSourceDomain: str(p, "requestSourceDomain", "/payment", { required: true, max: 253 })!,
+    requestSourceDomain: str(p, "requestSourceDomain", "/payment", { required: true, max: 253, pattern: HOSTNAME })!.toLowerCase(),
     ...optional("invoiceContactPhone", str(p, "invoiceContactPhone", "/payment", { max: 32 })),
     ...optional("memo", str(p, "memo", "/payment", { max: 280 })),
   };

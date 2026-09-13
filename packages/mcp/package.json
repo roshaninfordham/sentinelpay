@@ -66,11 +66,16 @@
     "start": "tsx src/bin.ts",
     "test": "tsx --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "../engine/node_modules/.bin/tsup",
+    "build": "tsup",
     "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "payfirewall": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }
