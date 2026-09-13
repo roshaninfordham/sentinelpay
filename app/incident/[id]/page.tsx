@@ -110,7 +110,19 @@ export default async function IncidentPage({ params }: PageProps<"/incident/[id]
                 <Row k="Status" v={v.challenge.status.charAt(0) + v.challenge.status.slice(1).toLowerCase()} />
               </>
             )}
-            {r.call && <Row k="Verdict" v={<span className="font-mono text-sm">{r.call.verdict}</span>} />}
+            {r.call && (
+              <Row
+                k="Verdict"
+                v={
+                  // An operator freeze is not the vendor's answer: don't present it as a vendor denial.
+                  callResult?.reason === "BLOCKED_BY_PRINCIPAL" || v?.reason === "BLOCKED_BY_PRINCIPAL" ? (
+                    "Frozen by the operator before the vendor answered"
+                  ) : (
+                    <span className="font-mono text-sm">{r.call.verdict}</span>
+                  )
+                }
+              />
+            )}
             {v?.challenge && <Row k="Resolved by" v={v.challenge.resolvedBy ?? "Expired (failed closed)"} />}
             <Row k="Authorized with token" v={callResult ? (callResult.authorizedWithToken ? "Yes" : "No") : "No answer recorded"} />
             {r.call && (
