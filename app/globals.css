@@ -41,6 +41,13 @@ body {
   outline-offset: 2px;
 }
 
+/* JetBrains Mono's coding ligatures turn "!==" and "://" into glyphs; code shown to integrators must read literally. */
+code,
+pre,
+.font-mono {
+  font-variant-ligatures: none;
+}
+
 ::selection {
   background: color-mix(in oklab, var(--brass) 45%, transparent);
 }

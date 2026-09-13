@@ -36,6 +36,8 @@ export default async function IncidentPage({ params }: PageProps<"/incident/[id]
   const callResult = r.entries.findLast((e) => e.event === "CALL_RESULT")?.payload as
     | { authorizedWithToken?: boolean; reason?: string }
     | undefined;
+  const lastRail = r.entries.findLast((e) => e.event === "RAIL_RELEASED" || e.event === "RAIL_ERROR");
+  const railError = lastRail?.event === "RAIL_ERROR" ? ((lastRail.payload as { error?: string } | null)?.error ?? "the rail refused the transfer") : null;
   const riskReasons = r.assessment?.reasons ?? [];
   const mismatchCodes = v?.mismatches.map((m) => m.code) ?? [];
 
@@ -79,7 +81,11 @@ export default async function IncidentPage({ params }: PageProps<"/incident/[id]
           <Row k="Vendor of record" v={`${r.vendor.knownDomain}, account ••${r.vendor.knownBankLast4}`} />
           <Row k="Requested change" v={`Account ••${r.payment.claimedBankLast4}, from ${r.payment.requestSourceDomain}`} />
           <Row k="Invoice contact number" v={`${r.payment.invoiceContactPhone ?? "None"} (not used)`} />
-          {r.payment.railReference && <Row k="Column sandbox wire" v={r.payment.railReference} />}
+          {r.payment.railReference ? (
+            <Row k="Column sandbox wire" v={<span className="break-all font-mono text-sm">{r.payment.railReference}</span>} />
+          ) : (
+            railError && <Row k="Rail wire" v={`Not created, no money moved: ${railError}`} />
+          )}
         </Section>
 
         {r.assessment && (
@@ -130,7 +136,7 @@ export default async function IncidentPage({ params }: PageProps<"/incident/[id]
           {r.entries.length === 0 ? (
             <p className="text-sm text-muted print:text-black/60">Audit chain empty for this payment.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Ledger entries, scrolls sideways">
               <table className="w-full min-w-[520px] text-left text-xs print:min-w-0">
                 <caption className="sr-only">Ledger entries for this payment</caption>
                 <thead className="text-muted print:text-black/60">

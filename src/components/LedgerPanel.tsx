@@ -37,7 +37,7 @@ export function LedgerPanel({ paymentId, entries, chainOk }: { paymentId: string
         {entries.length === 0 ? (
           <p className="px-4 py-3 text-sm text-muted">Audit chain empty. Each decision on this payment is written here, linked to the one before it.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Ledger entries, scrolls sideways">
             <table className="w-full min-w-[520px] text-sm">
               <caption className="sr-only">Ledger entries for this payment</caption>
               <thead className="text-left text-xs text-muted">

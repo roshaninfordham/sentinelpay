@@ -17,7 +17,7 @@ const TONE: Record<TimelineKind, string> = {
 // Probe lines served from recorded captures end in "[cached]" or "[cached: note]"; shown as a badge instead.
 const CACHED = /\s+\[cached(?::\s*([^\]]+))?\]$/;
 
-export function Terminal({ lines }: { lines: TimelineLine[] }) {
+export function Terminal({ lines, evidence }: { lines: TimelineLine[]; /** Where probe evidence comes from, e.g. "Live RDAP and Tavily". */ evidence: string }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // scroll only the log box, never the page
@@ -27,9 +27,12 @@ export function Terminal({ lines }: { lines: TimelineLine[] }) {
 
   return (
     <section aria-labelledby="investigation-heading" className="rounded-md border border-rule bg-[#08121a]">
-      <h2 id="investigation-heading" className="border-b border-rule px-4 py-2.5 font-display text-lg font-semibold">
-        Investigation
-      </h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-rule px-4 py-2.5">
+        <h2 id="investigation-heading" className="font-display text-lg font-semibold">
+          Investigation
+        </h2>
+        <span className="text-sm text-muted">{evidence}</span>
+      </div>
       <div
         ref={box}
         role="log"
@@ -54,7 +57,7 @@ export function Terminal({ lines }: { lines: TimelineLine[] }) {
                       className="ml-2 inline-block rounded border border-rule px-1 align-[1px] text-[10.5px] font-normal leading-4 text-muted"
                       title={cached[1] ? `Recorded fixture: ${cached[1]}` : "Recorded fixture"}
                     >
-                      fixture{cached[1] && <span className="sr-only">: {cached[1]}</span>}
+                      recorded fixture{cached[1] && <span className="sr-only">: {cached[1]}</span>}
                     </span>
                   )}
                 </span>
