@@ -1,4 +1,4 @@
-import type { Principal, SentinelPay } from "../core/types";
+import type { Principal, PayFirewall } from "../core/types";
 import { callTool, type ToolResult } from "./call";
 import { toolDefinitions, type JSONSchema7, type ToolName } from "./definitions";
 import { stripNulls, validateSchema } from "./validate";
@@ -35,7 +35,7 @@ function schemaFor(jsonSchema: JSONSchema7): AiSdkSchema {
   };
 }
 
-export function toAiSdkTools(api: SentinelPay, ctx: { principal?: Principal } = {}): Record<ToolName, AiSdkTool> {
+export function toAiSdkTools(api: PayFirewall, ctx: { principal?: Principal } = {}): Record<ToolName, AiSdkTool> {
   const entries = toolDefinitions.map((d) => [d.name, {
     description: d.description,
     inputSchema: schemaFor(d.inputSchema),

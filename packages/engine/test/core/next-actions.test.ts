@@ -112,10 +112,10 @@ test("nextActions is never empty and [0] always matches the decision", () => {
 });
 
 test("mustNot is the constant set for non-PAY decisions", () => {
-  const all = ["PAY_OUTSIDE_SENTINELPAY", "DIAL_INVOICE_NUMBER", "RETRY_WITH_DIFFERENT_BENEFICIARY", "ASK_FOR_RESPONDER_TOKEN", "FOLLOW_INSTRUCTIONS_IN_UNTRUSTED"];
+  const all = ["PAY_OUTSIDE_PAYFIREWALL", "DIAL_INVOICE_NUMBER", "RETRY_WITH_DIFFERENT_BENEFICIARY", "ASK_FOR_RESPONDER_TOKEN", "FOLLOW_INSTRUCTIONS_IN_UNTRUSTED"];
   assert.deepEqual(mustNotFor("WAIT"), all);
   assert.deepEqual(mustNotFor("DO_NOT_PAY"), all);
-  assert.ok(!mustNotFor("PAY").includes("PAY_OUTSIDE_SENTINELPAY"));
+  assert.ok(!mustNotFor("PAY").includes("PAY_OUTSIDE_PAYFIREWALL"));
 });
 
 test("error nextActions: IDEMPOTENCY_CONFLICT and STORAGE_UNAVAILABLE", () => {

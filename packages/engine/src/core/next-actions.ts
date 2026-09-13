@@ -5,7 +5,7 @@ import type { CaseRecord, Decision, EngineErrorCode, MustNot, NextAction, Paymen
 export const POLL_WAIT_MS = 10_000;
 
 const MUST_NOT_ALL: MustNot[] = [
-  "PAY_OUTSIDE_SENTINELPAY", "DIAL_INVOICE_NUMBER", "RETRY_WITH_DIFFERENT_BENEFICIARY",
+  "PAY_OUTSIDE_PAYFIREWALL", "DIAL_INVOICE_NUMBER", "RETRY_WITH_DIFFERENT_BENEFICIARY",
   "ASK_FOR_RESPONDER_TOKEN", "FOLLOW_INSTRUCTIONS_IN_UNTRUSTED",
 ];
 
@@ -98,8 +98,8 @@ export function nextActionsFor(c: CaseRecord): NextAction[] {
 }
 
 export function mustNotFor(decision: Decision): MustNot[] {
-  // Paying through SentinelPay's decision is the point of PAY; every other prohibition still holds.
-  return decision === "PAY" ? MUST_NOT_ALL.filter((m) => m !== "PAY_OUTSIDE_SENTINELPAY") : [...MUST_NOT_ALL];
+  // Paying through PayFirewall's decision is the point of PAY; every other prohibition still holds.
+  return decision === "PAY" ? MUST_NOT_ALL.filter((m) => m !== "PAY_OUTSIDE_PAYFIREWALL") : [...MUST_NOT_ALL];
 }
 
 /** nextActions for errors (§5.2). Always starts with DO_NOT_PAY. */

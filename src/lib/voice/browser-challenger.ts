@@ -1,5 +1,5 @@
 import type { Client } from "@libsql/client";
-import type { Challenger } from "@sentinelpay/engine";
+import type { Challenger } from "payfirewall";
 
 // voice_browser Challenger (ENGINE_SPEC §4.3 rule 6). The operator's browser places the call, so the responder
 // token is handed to it through /api/voice/token: assurance is "operator_session", never "out_of_band".

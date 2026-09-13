@@ -1,4 +1,4 @@
-import { ConfigError, EngineError } from "@sentinelpay/engine";
+import { ConfigError, EngineError } from "payfirewall";
 
 // Legacy routes keep their `{ error: string }` bodies for one release; engine errors keep their HTTP status.
 export function legacyError(err: unknown, fallbackStatus: number): Response {

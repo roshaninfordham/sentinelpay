@@ -1,4 +1,4 @@
-import { EngineError, type EngineErrorCode, type NextAction, type Principal, type Receipt, type SentinelPay, type Verification } from "../core/types";
+import { EngineError, type EngineErrorCode, type NextAction, type Principal, type Receipt, type PayFirewall, type Verification } from "../core/types";
 import { toolDefinition, type JSONSchema7 } from "./definitions";
 import { stripNulls, validateSchema } from "./validate";
 
@@ -86,7 +86,7 @@ export function parseArgs<T>(schema: JSONSchema7, raw: unknown, opts: { nullAsAb
   return args as T;
 }
 
-interface VerifyArgs { payment: Parameters<SentinelPay["verify"]>[0]; waitMs?: number }
+interface VerifyArgs { payment: Parameters<PayFirewall["verify"]>[0]; waitMs?: number }
 interface GetArgs { paymentId: string; waitMs?: number; sinceVersion?: number; includeReceipt?: boolean }
 interface BlockArgs { paymentId: string; reason: string }
 
@@ -94,7 +94,7 @@ interface BlockArgs { paymentId: string; reason: string }
 const GET_DEFAULT_WAIT_MS = 10_000;
 
 /** Runs one requester tool. Never throws: every failure becomes the §5.2 error envelope. */
-export async function callTool(api: SentinelPay, name: string, args: unknown, ctx: { principal?: Principal } = {}): Promise<ToolResult> {
+export async function callTool(api: PayFirewall, name: string, args: unknown, ctx: { principal?: Principal } = {}): Promise<ToolResult> {
   try {
     const def = toolDefinition(name);
     if (!def) throw invalidInput("", `unknown tool ${name}`);

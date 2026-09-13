@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EngineError, type Verification } from "../../src/core/types";
-import { createHandler, createHttpClient, SentinelPayHttpError } from "../../src/http";
+import { createHandler, createHttpClient, PayFirewallHttpError } from "../../src/http";
 import { callTool } from "../../src/tools";
 import { AGENT, clean, poisoned, setup } from "../core/helpers";
 import { BASE, authenticate } from "./helpers";
@@ -61,16 +61,16 @@ test("HTTP errors come back as EngineError instances with code, status, path and
     e.code === "IDEMPOTENCY_CONFLICT" && e.httpStatus === 409 && e.nextActions[0].type === "DO_NOT_PAY" && e.nextActions[1].type === "ESCALATE_TO_HUMAN");
 });
 
-test("401, non-JSON responses and network failures are SentinelPayHttpError and map to DO_NOT_PAY through callTool", async () => {
+test("401, non-JSON responses and network failures are PayFirewallHttpError and map to DO_NOT_PAY through callTool", async () => {
   const unauthorized = roundTrip("sk_revoked").client;
-  await assert.rejects(unauthorized.get("pay_1"), (e: unknown) => e instanceof SentinelPayHttpError && e.status === 401 && e.code === "UNAUTHORIZED" && !e.retryable);
+  await assert.rejects(unauthorized.get("pay_1"), (e: unknown) => e instanceof PayFirewallHttpError && e.status === 401 && e.code === "UNAUTHORIZED" && !e.retryable);
 
   const proxyError = createHttpClient({ baseUrl: BASE, apiKey: "k", fetch: async () => new Response("<html>502 Bad Gateway</html>", { status: 502 }) });
-  await assert.rejects(proxyError.get("pay_1"), (e: SentinelPayHttpError) => e.status === 502 && e.retryable);
+  await assert.rejects(proxyError.get("pay_1"), (e: PayFirewallHttpError) => e.status === 502 && e.retryable);
   const garbled = createHttpClient({ baseUrl: BASE, apiKey: "k", fetch: async () => new Response("not json", { status: 200 }) });
-  await assert.rejects(garbled.get("pay_1"), (e: SentinelPayHttpError) => e.code === "INVALID_RESPONSE");
+  await assert.rejects(garbled.get("pay_1"), (e: PayFirewallHttpError) => e.code === "INVALID_RESPONSE");
   const offline = createHttpClient({ baseUrl: BASE, apiKey: "k", fetch: async () => { throw new TypeError("fetch failed"); } });
-  await assert.rejects(offline.verify(clean()), (e: SentinelPayHttpError) => e.code === "NETWORK_ERROR" && e.retryable);
+  await assert.rejects(offline.verify(clean()), (e: PayFirewallHttpError) => e.code === "NETWORK_ERROR" && e.retryable);
 
   for (const api of [unauthorized, proxyError, offline]) {
     const r = await callTool(api, "verify_payment", { payment: clean() });

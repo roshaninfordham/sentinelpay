@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { memoryStorage } from "../../src/adapters/memory";
 import { humanApprovalChallenger } from "../../src/challengers/human-approval";
-import type { SentinelPay, Storage } from "../../src/core/types";
+import type { PayFirewall, Storage } from "../../src/core/types";
 import { openApiDocument } from "../../src/http";
 import { pendingChallenger } from "../../src/testing";
 import { toolDefinitions } from "../../src/tools";
@@ -288,7 +288,7 @@ test("result route: 409 when fixture data blocks a production clear, 410 after e
 
 test("an api without the responder ingress serves 404 for the result and ledger routes", async () => {
   const s = setup();
-  const requesterOnly: SentinelPay = {
+  const requesterOnly: PayFirewall = {
     verify: (p, o) => s.engine.verify(p, o), get: (id, o) => s.engine.get(id, o),
     block: (id, o) => s.engine.block(id, o), receipt: (id, o) => s.engine.receipt(id, o),
   };

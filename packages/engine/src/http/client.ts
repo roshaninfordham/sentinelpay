@@ -1,11 +1,11 @@
-import { EngineError, type NextAction, type PaymentInput, type Principal, type Receipt, type SentinelPay, type Verification } from "../core/types";
+import { EngineError, type NextAction, type PaymentInput, type Principal, type Receipt, type PayFirewall, type Verification } from "../core/types";
 import { isEngineErrorCode } from "../tools/call";
 
-// SentinelPay over the v1 HTTP contract. Identity comes from the API key; a per-call `principal` is ignored,
+// PayFirewall over the v1 HTTP contract. Identity comes from the API key; a per-call `principal` is ignored,
 // because a remote caller can never choose who it is.
 
 /** A non-engine HTTP failure (401 UNAUTHORIZED, a proxy error page, a network failure). Always means do not pay. */
-export class SentinelPayHttpError extends Error {
+export class PayFirewallHttpError extends Error {
   readonly status: number;
   readonly code: string;
   readonly retryable: boolean;
@@ -13,7 +13,7 @@ export class SentinelPayHttpError extends Error {
 
   constructor(status: number, code: string, message: string, retryable: boolean) {
     super(message);
-    this.name = "SentinelPayHttpError";
+    this.name = "PayFirewallHttpError";
     this.status = status;
     this.code = code;
     this.retryable = retryable;
@@ -22,7 +22,7 @@ export class SentinelPayHttpError extends Error {
 }
 
 export interface HttpClientOptions {
-  /** e.g. "https://sentinelpay.example.com/api/v1" */
+  /** e.g. "https://payfirewall.example.com/api/v1" */
   baseUrl: string;
   apiKey: string;
   fetch?: typeof fetch;
@@ -40,10 +40,10 @@ function toError(status: number, body: unknown): Error {
     });
   }
   const code = typeof e?.code === "string" ? e.code : "HTTP_ERROR";
-  return new SentinelPayHttpError(status, code, message, status >= 500 || status === 429);
+  return new PayFirewallHttpError(status, code, message, status >= 500 || status === 429);
 }
 
-export function createHttpClient(opts: HttpClientOptions): SentinelPay {
+export function createHttpClient(opts: HttpClientOptions): PayFirewall {
   const base = opts.baseUrl.replace(/\/+$/, "");
   const doFetch = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
   const id = (paymentId: string) => encodeURIComponent(paymentId);
@@ -62,7 +62,7 @@ export function createHttpClient(opts: HttpClientOptions): SentinelPay {
         ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
       });
     } catch (err) {
-      throw new SentinelPayHttpError(0, "NETWORK_ERROR", `request failed: ${err instanceof Error ? err.message : String(err)}`, true);
+      throw new PayFirewallHttpError(0, "NETWORK_ERROR", `request failed: ${err instanceof Error ? err.message : String(err)}`, true);
     }
     const text = await res.text();
     let body: unknown;
@@ -72,7 +72,7 @@ export function createHttpClient(opts: HttpClientOptions): SentinelPay {
       body = undefined;
     }
     if (!res.ok) throw toError(res.status, body);
-    if (body === undefined) throw new SentinelPayHttpError(res.status, "INVALID_RESPONSE", "response body is not JSON", true);
+    if (body === undefined) throw new PayFirewallHttpError(res.status, "INVALID_RESPONSE", "response body is not JSON", true);
     return body as T;
   }
 

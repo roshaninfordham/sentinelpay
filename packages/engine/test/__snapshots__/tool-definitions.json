@@ -459,7 +459,7 @@
           "items": {
             "type": "string",
             "enum": [
-              "PAY_OUTSIDE_SENTINELPAY",
+              "PAY_OUTSIDE_PAYFIREWALL",
               "DIAL_INVOICE_NUMBER",
               "RETRY_WITH_DIFFERENT_BENEFICIARY",
               "ASK_FOR_RESPONDER_TOKEN",
@@ -1246,7 +1246,7 @@
               "items": {
                 "type": "string",
                 "enum": [
-                  "PAY_OUTSIDE_SENTINELPAY",
+                  "PAY_OUTSIDE_PAYFIREWALL",
                   "DIAL_INVOICE_NUMBER",
                   "RETRY_WITH_DIFFERENT_BENEFICIARY",
                   "ASK_FOR_RESPONDER_TOKEN",
@@ -1994,7 +1994,7 @@
                   "items": {
                     "type": "string",
                     "enum": [
-                      "PAY_OUTSIDE_SENTINELPAY",
+                      "PAY_OUTSIDE_PAYFIREWALL",
                       "DIAL_INVOICE_NUMBER",
                       "RETRY_WITH_DIFFERENT_BENEFICIARY",
                       "ASK_FOR_RESPONDER_TOKEN",
@@ -2748,7 +2748,7 @@
                       "items": {
                         "type": "string",
                         "enum": [
-                          "PAY_OUTSIDE_SENTINELPAY",
+                          "PAY_OUTSIDE_PAYFIREWALL",
                           "DIAL_INVOICE_NUMBER",
                           "RETRY_WITH_DIFFERENT_BENEFICIARY",
                           "ASK_FOR_RESPONDER_TOKEN",
@@ -3653,7 +3653,7 @@
           "items": {
             "type": "string",
             "enum": [
-              "PAY_OUTSIDE_SENTINELPAY",
+              "PAY_OUTSIDE_PAYFIREWALL",
               "DIAL_INVOICE_NUMBER",
               "RETRY_WITH_DIFFERENT_BENEFICIARY",
               "ASK_FOR_RESPONDER_TOKEN",

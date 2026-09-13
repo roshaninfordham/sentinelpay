@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { McpError } from "@modelcontextprotocol/sdk/types.js";
-import { assessRisk, EngineError, levelFor, type ForensicSignal, type SentinelPay, type Verification } from "@sentinelpay/engine";
+import { assessRisk, EngineError, levelFor, type ForensicSignal, type PayFirewall, type Verification } from "payfirewall";
 import { POLICY } from "../src/policy";
 import { createMcpServer, VERIFY_BEFORE_PAYING } from "../src/server";
-import { createHttpClient } from "@sentinelpay/engine/client";
+import { createHttpClient } from "payfirewall/client";
 import { AGENT_API_KEY, connect, connectedScenario, poisoned } from "./helpers";
 
 const readJson = async (client: Awaited<ReturnType<typeof connect>>["client"], uri: string) => {
@@ -19,9 +19,9 @@ test("declares tools, resources and prompts; lists the policy resource and both 
   const caps = s.client.getServerCapabilities();
   assert.ok(caps?.tools && caps.resources && caps.prompts);
   assert.equal(caps.resources.subscribe, undefined, "resources are not subscribable in v0.1");
-  assert.deepEqual((await s.client.listResources()).resources.map((r) => r.uri), ["sentinelpay://policy"]);
+  assert.deepEqual((await s.client.listResources()).resources.map((r) => r.uri), ["payfirewall://policy"]);
   assert.deepEqual((await s.client.listResourceTemplates()).resourceTemplates.map((r) => r.uriTemplate), [
-    "sentinelpay://verifications/{paymentId}", "sentinelpay://verifications/{paymentId}/receipt",
+    "payfirewall://verifications/{paymentId}", "payfirewall://verifications/{paymentId}/receipt",
   ]);
 });
 
@@ -30,28 +30,28 @@ test("verification and receipt resources read through the engine; unknown paymen
   t.after(s.close);
   await s.engine.verify(poisoned());
 
-  const v = await readJson(s.client, "sentinelpay://verifications/pay_240k") as Verification;
+  const v = await readJson(s.client, "payfirewall://verifications/pay_240k") as Verification;
   assert.deepEqual([v.object, v.paymentId, v.decision], ["verification", "pay_240k", "WAIT"]);
   const withReceipt = await s.client.callTool({ name: "get_verification", arguments: { paymentId: "pay_240k", waitMs: 0, includeReceipt: true } });
   const both = withReceipt.structuredContent as { verification: Verification; receipt: { chain: { ok: boolean } } };
   assert.deepEqual([withReceipt.isError ?? false, both.verification.paymentId, both.receipt.chain.ok], [false, "pay_240k", true]);
   assert.match((withReceipt.content as Array<{ text: string }>)[0].text, /^decision=WAIT reason=\w+ next=POLL$/);
 
-  const receipt = await readJson(s.client, "sentinelpay://verifications/pay_240k/receipt");
+  const receipt = await readJson(s.client, "payfirewall://verifications/pay_240k/receipt");
   assert.equal(receipt.verification.paymentId, "pay_240k");
   assert.equal(receipt.chain.ok, true);
 
-  await assert.rejects(s.client.readResource({ uri: "sentinelpay://verifications/pay_missing" }), (err: unknown) =>
+  await assert.rejects(s.client.readResource({ uri: "payfirewall://verifications/pay_missing" }), (err: unknown) =>
     err instanceof McpError && err.code === -32002 && (err.data as { error: { code: string } }).error.code === "NOT_FOUND");
-  await assert.rejects(s.client.readResource({ uri: "sentinelpay://verifications/bad%20id" }), (err: unknown) =>
+  await assert.rejects(s.client.readResource({ uri: "payfirewall://verifications/bad%20id" }), (err: unknown) =>
     err instanceof McpError && err.code === -32602);
-  await assert.rejects(s.client.readResource({ uri: "sentinelpay://ledger" }), (err: unknown) => err instanceof McpError && err.code === -32002);
+  await assert.rejects(s.client.readResource({ uri: "payfirewall://ledger" }), (err: unknown) => err instanceof McpError && err.code === -32002);
 });
 
 test("policy resource matches assessRisk and levelFor", async (t) => {
   const s = await connectedScenario();
   t.after(s.close);
-  const policy = await readJson(s.client, "sentinelpay://policy");
+  const policy = await readJson(s.client, "payfirewall://policy");
   assert.deepEqual(policy, JSON.parse(JSON.stringify(POLICY)));
   assert.equal(policy.policyVersion, "rules-v1");
 
@@ -99,7 +99,7 @@ test("invalid arguments, identity fields and non-engine failures come back as is
   const spoof = await s.client.callTool({ name: "block_payment", arguments: { paymentId: "pay_240k", reason: "stop", principal: { id: "human:ops" } } });
   assert.deepEqual([spoof.isError, (spoof.structuredContent as { error: { code: string } }).error.code], [true, "INVALID_INPUT"]);
 
-  const failing: SentinelPay = {
+  const failing: PayFirewall = {
     verify: async () => { throw new Error("db password is hunter2"); },
     get: async () => { throw new EngineError("STORAGE_UNAVAILABLE", "down"); },
     block: async () => { throw new Error("x"); },
@@ -116,7 +116,7 @@ test("invalid arguments, identity fields and non-engine failures come back as is
 
 test("sweep runs on an interval only while a client is connected, and needs an Engine", async () => {
   let sweeps = 0;
-  const api = { sweep: async () => { sweeps++; return { advanced: 0, expired: 0 }; } } as unknown as SentinelPay;
+  const api = { sweep: async () => { sweeps++; return { advanced: 0, expired: 0 }; } } as unknown as PayFirewall;
   const c = await connect(api, { sweep: { intervalMs: 5 } });
   await new Promise((r) => setTimeout(r, 40));
   await c.close();
@@ -125,7 +125,7 @@ test("sweep runs on an interval only while a client is connected, and needs an E
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(sweeps, atClose, "sweep kept running after the client disconnected");
 
-  const remoteLike = { verify: async () => ({}), get: async () => ({}), block: async () => ({}), receipt: async () => ({}) } as unknown as SentinelPay;
+  const remoteLike = { verify: async () => ({}), get: async () => ({}), block: async () => ({}), receipt: async () => ({}) } as unknown as PayFirewall;
   assert.throws(() => createMcpServer(remoteLike, { sweep: {} }), /needs an Engine/);
 });
 
@@ -133,7 +133,7 @@ test("remote mode: the server over createHttpClient proxies to the host handler 
   const s = await connectedScenario();
   t.after(s.close);
   const remote = createHttpClient({
-    baseUrl: "https://sentinelpay.test/api/v1", apiKey: AGENT_API_KEY,
+    baseUrl: "https://payfirewall.test/api/v1", apiKey: AGENT_API_KEY,
     fetch: async (input, init) => s.handler(new Request(input, init)),
   });
   const c = await connect(remote);

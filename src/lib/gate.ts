@@ -1,4 +1,4 @@
-import type { PaymentInput, Verification } from "@sentinelpay/engine";
+import type { PaymentInput, Verification } from "payfirewall";
 import { getRuntime } from "./engine";
 import { paymentSource } from "./providers";
 import { describeMismatch } from "./timeline-format";

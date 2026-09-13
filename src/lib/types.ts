@@ -1,7 +1,7 @@
 // App-side contracts. Engine vocabulary (states, verdicts, risk levels, challenge view) comes from
-// @sentinelpay/engine; the shapes below are the dashboard's legacy wire format kept for one release.
+// payfirewall; the shapes below are the dashboard's legacy wire format kept for one release.
 
-import type { PaymentStatus, RiskLevel, Verdict, Verification } from "@sentinelpay/engine";
+import type { PaymentStatus, RiskLevel, Verdict, Verification } from "payfirewall";
 
 export type { PaymentStatus, RiskLevel, Verdict };
 

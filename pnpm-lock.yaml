@@ -23,15 +23,15 @@ importers:
       '@libsql/client':
         specifier: ^0.18.0
         version: 0.18.0
-      '@sentinelpay/engine':
-        specifier: workspace:*
-        version: link:packages/engine
       framer-motion:
         specifier: ^13.2.0
         version: 13.2.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       next:
         specifier: 16.3.5
         version: 16.3.5(@babel/core@7.29.7)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      payfirewall:
+        specifier: workspace:*
+        version: link:packages/engine
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -99,7 +99,7 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@4.6.2)
-      '@sentinelpay/engine':
+      payfirewall:
         specifier: workspace:*
         version: link:../engine
 

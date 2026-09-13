@@ -4,30 +4,30 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import type { Verification } from "@sentinelpay/engine";
+import type { Verification } from "payfirewall";
 import { resolveLaunch, UsageError } from "../src/config";
 
 const BIN = fileURLToPath(new URL("../src/bin.ts", import.meta.url));
-const EMBEDDED_CONFIG = fileURLToPath(new URL("./fixtures/sentinelpay.config.ts", import.meta.url));
+const EMBEDDED_CONFIG = fileURLToPath(new URL("./fixtures/payfirewall.config.ts", import.meta.url));
 /** Runs the TypeScript bin with the same tsx loader as this test process. */
 const nodeArgs = () => [...process.execArgv.filter((a) => !a.startsWith("--test")), BIN];
 
 test("resolveLaunch picks remote or embedded mode and refuses anything ambiguous or incomplete", () => {
-  const remote = { SENTINELPAY_URL: "https://sentinelpay.example/api/v1", SENTINELPAY_API_KEY: "sk_test" };
-  assert.deepEqual(resolveLaunch([], remote), { mode: "remote", url: remote.SENTINELPAY_URL, apiKey: "sk_test" });
-  assert.deepEqual(resolveLaunch([], { SENTINELPAY_URL: "http://localhost:3000/api/v1", SENTINELPAY_API_KEY: "k" }).mode, "remote");
-  assert.deepEqual(resolveLaunch(["--config", "./sentinelpay.config.mjs"], {}), { mode: "embedded", configPath: "./sentinelpay.config.mjs" });
+  const remote = { PAYFIREWALL_URL: "https://payfirewall.example/api/v1", PAYFIREWALL_API_KEY: "sk_test" };
+  assert.deepEqual(resolveLaunch([], remote), { mode: "remote", url: remote.PAYFIREWALL_URL, apiKey: "sk_test" });
+  assert.deepEqual(resolveLaunch([], { PAYFIREWALL_URL: "http://localhost:3000/api/v1", PAYFIREWALL_API_KEY: "k" }).mode, "remote");
+  assert.deepEqual(resolveLaunch(["--config", "./payfirewall.config.mjs"], {}), { mode: "embedded", configPath: "./payfirewall.config.mjs" });
   assert.deepEqual(resolveLaunch(["--config=cfg.mjs"], {}), { mode: "embedded", configPath: "cfg.mjs" });
   assert.deepEqual(resolveLaunch(["--help"], {}), { mode: "help" });
 
   const refuses = (argv: string[], env: Record<string, string>, message: RegExp) =>
     assert.throws(() => resolveLaunch(argv, env), (err: unknown) => err instanceof UsageError && message.test(err.message));
   refuses([], {}, /no configuration/);
-  refuses([], { SENTINELPAY_URL: remote.SENTINELPAY_URL }, /needs both/);
-  refuses([], { SENTINELPAY_API_KEY: "sk_test" }, /needs both/);
-  refuses([], { SENTINELPAY_URL: "  ", SENTINELPAY_API_KEY: "sk_test" }, /needs both/);
-  refuses([], { SENTINELPAY_URL: "http://sentinelpay.example/api/v1", SENTINELPAY_API_KEY: "k" }, /https/);
-  refuses([], { SENTINELPAY_URL: "not a url", SENTINELPAY_API_KEY: "k" }, /not a valid URL/);
+  refuses([], { PAYFIREWALL_URL: remote.PAYFIREWALL_URL }, /needs both/);
+  refuses([], { PAYFIREWALL_API_KEY: "sk_test" }, /needs both/);
+  refuses([], { PAYFIREWALL_URL: "  ", PAYFIREWALL_API_KEY: "sk_test" }, /needs both/);
+  refuses([], { PAYFIREWALL_URL: "http://payfirewall.example/api/v1", PAYFIREWALL_API_KEY: "k" }, /https/);
+  refuses([], { PAYFIREWALL_URL: "not a url", PAYFIREWALL_API_KEY: "k" }, /not a valid URL/);
   refuses(["--config", "cfg.mjs"], remote, /not both/);
   refuses(["--config"], {}, /needs a module path/);
   refuses(["--config", "--help"], {}, /needs a module path/);
@@ -36,8 +36,8 @@ test("resolveLaunch picks remote or embedded mode and refuses anything ambiguous
 
 test("the bin exits non-zero without configuration and never starts the server", () => {
   const env = { ...process.env };
-  delete env.SENTINELPAY_URL;
-  delete env.SENTINELPAY_API_KEY;
+  delete env.PAYFIREWALL_URL;
+  delete env.PAYFIREWALL_API_KEY;
   const run = spawnSync(process.execPath, nodeArgs(), {
     env, input: "", encoding: "utf8", timeout: 20_000,
   });

@@ -1,7 +1,7 @@
 {
-  "name": "@sentinelpay/mcp",
+  "name": "payfirewall-mcp",
   "version": "0.1.0",
-  "description": "MCP server exposing the SentinelPay requester tools (verify_payment, get_verification, block_payment).",
+  "description": "MCP server exposing the PayFirewall requester tools (verify_payment, get_verification, block_payment).",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -9,7 +9,7 @@
     "node": ">=20"
   },
   "bin": {
-    "sentinelpay-mcp": "./src/bin.ts"
+    "payfirewall-mcp": "./src/bin.ts"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -21,7 +21,7 @@
   "publishConfig": {
     "access": "public",
     "bin": {
-      "sentinelpay-mcp": "./dist/bin.js"
+      "payfirewall-mcp": "./dist/bin.js"
     },
     "exports": {
       ".": {
@@ -44,6 +44,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@sentinelpay/engine": "workspace:*"
+    "payfirewall": "workspace:*"
   }
 }

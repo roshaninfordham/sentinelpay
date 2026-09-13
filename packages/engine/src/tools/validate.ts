@@ -1,6 +1,6 @@
 import type { JSONSchema7, JSONSchemaType } from "./definitions";
 
-// Dependency-free validator for the JSON Schema keywords the SentinelPay schemas use:
+// Dependency-free validator for the JSON Schema keywords the PayFirewall schemas use:
 // type, properties, required, additionalProperties, items, anyOf, enum, const, pattern,
 // minimum/maximum (with integer), minLength/maxLength. Returns the first failure with a JSON pointer.
 

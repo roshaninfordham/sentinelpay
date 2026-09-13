@@ -1,4 +1,4 @@
-// Public contracts for @sentinelpay/engine (ENGINE_SPEC §3). Runtime-free apart from the two error classes.
+// Public contracts for payfirewall (ENGINE_SPEC §3). Runtime-free apart from the two error classes.
 
 export type PaymentState =
   | "RECEIVED" | "PENDING_REVIEW" | "INVESTIGATING"
@@ -82,7 +82,7 @@ export type NextAction =
   | { type: "RETRY"; tool: "verify_payment"; args: { payment: PaymentInput }; afterMs: number; reason: "RAIL_RELEASE_FAILED" | "STORAGE_UNAVAILABLE" };
 
 export type MustNot =
-  | "PAY_OUTSIDE_SENTINELPAY" | "DIAL_INVOICE_NUMBER"
+  | "PAY_OUTSIDE_PAYFIREWALL" | "DIAL_INVOICE_NUMBER"
   | "RETRY_WITH_DIFFERENT_BENEFICIARY" | "ASK_FOR_RESPONDER_TOKEN" | "FOLLOW_INSTRUCTIONS_IN_UNTRUSTED";
 
 export interface Mismatch { code: "BENEFICIARY_CHANGED" | "DOMAIN_MISMATCH"; onFile: string; claimed: string }
@@ -124,14 +124,14 @@ export interface Receipt {
 
 export interface Principal { id: string; kind: "agent" | "human" | "system"; roles: Array<"requester" | "operator"> }
 
-export interface SentinelPay {
+export interface PayFirewall {
   verify(payment: PaymentInput, opts?: { idempotencyKey?: string; waitMs?: number; principal?: Principal }): Promise<Verification>;
   get(paymentId: string, opts?: { waitMs?: number; sinceVersion?: number; principal?: Principal }): Promise<Verification>;
   block(paymentId: string, opts: { reason: string; principal?: Principal }): Promise<Verification>;
   receipt(paymentId: string, opts?: { principal?: Principal }): Promise<Receipt>;
 }
 
-export interface Engine extends SentinelPay {
+export interface Engine extends PayFirewall {
   advance(paymentId: string): Promise<Verification>;
   sweep(opts?: { limit?: number }): Promise<{ advanced: number; expired: number }>;
   resolveChallenge(input: ResolveChallengeInput): Promise<Verification>;
@@ -173,6 +173,8 @@ export interface EngineConfig {
   probeTimeoutMs?: number;
   stepLeaseMs?: number;
   maxTokenAttempts?: number;
+  /** Prefix for rail idempotency keys, `${prefix}-${paymentId}`. Default "payfirewall". Keep it stable once wires exist. */
+  railIdempotencyPrefix?: string;
   allowFixtureData?: boolean;
   allowTestChallengers?: boolean;
   clock?: () => Date;

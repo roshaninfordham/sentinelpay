@@ -12,6 +12,7 @@ export interface Settings {
   probeTimeoutMs: number;
   stepLeaseMs: number;
   maxTokenAttempts: number;
+  railIdempotencyPrefix: string;
   allowFixtureData: boolean;
   now: () => Date;
 }
@@ -23,6 +24,12 @@ const byteLength = (s: string) => new TextEncoder().encode(s).length;
 function positiveInt(value: number | undefined, fallback: number, name: string): number {
   if (value === undefined) return fallback;
   if (!Number.isSafeInteger(value) || value < 1) throw new ConfigError(`${name} must be a positive integer`);
+  return value;
+}
+
+function idempotencyPrefix(value: string | undefined): string {
+  if (value === undefined) return "payfirewall";
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(value)) throw new ConfigError("railIdempotencyPrefix must match ^[A-Za-z0-9_-]{1,40}$");
   return value;
 }
 
@@ -76,6 +83,7 @@ export function resolveConfig(config: EngineConfig): Settings {
     probeTimeoutMs: positiveInt(config.probeTimeoutMs, 8_000, "probeTimeoutMs"),
     stepLeaseMs: positiveInt(config.stepLeaseMs, 60_000, "stepLeaseMs"),
     maxTokenAttempts: positiveInt(config.maxTokenAttempts, 5, "maxTokenAttempts"),
+    railIdempotencyPrefix: idempotencyPrefix(config.railIdempotencyPrefix),
     allowFixtureData: config.allowFixtureData ?? !production,
     now: config.clock ?? (() => new Date()),
   };

@@ -9,7 +9,7 @@ import { hashEntry, verifyEntries } from "../../src/core/hash";
 import type { CaseRecord, StoredLedgerEntry } from "../../src/core/types";
 import { runStorageContract } from "../../src/testing";
 
-const dir = mkdtempSync(path.join(tmpdir(), "sentinelpay-libsql-"));
+const dir = mkdtempSync(path.join(tmpdir(), "payfirewall-libsql-"));
 const clients: Client[] = [];
 let n = 0;
 

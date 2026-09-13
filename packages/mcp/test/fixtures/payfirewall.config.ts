@@ -1,6 +1,6 @@
-import type { EngineConfig } from "@sentinelpay/engine";
-import { memoryStorage, memoryVendors } from "@sentinelpay/engine/adapters/memory";
-import { pendingChallenger } from "@sentinelpay/engine/testing";
+import type { EngineConfig } from "payfirewall";
+import { memoryStorage, memoryVendors } from "payfirewall/adapters/memory";
+import { pendingChallenger } from "payfirewall/testing";
 
 // Embedded-mode config for the stdio smoke test: in-memory, no probes, a challenger that never resolves.
 const config: EngineConfig = {

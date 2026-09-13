@@ -1,4 +1,4 @@
-import { EngineError, type ChallengeAnswers, type Principal } from "@sentinelpay/engine";
+import { EngineError, type ChallengeAnswers, type Principal } from "payfirewall";
 import { getRuntime } from "@/lib/engine";
 
 export const dynamic = "force-dynamic";

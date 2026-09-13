@@ -64,7 +64,7 @@ export function columnRail(opts: ColumnRailOptions): Rail {
         bank_account_id: opts.bankAccountId,
         counterparty_id: counterpartyFor(p),
         amount: p.amountCents,
-        description: (p.memo ?? `SentinelPay ${p.id}`).slice(0, 140),
+        description: (p.memo ?? `PayFirewall ${p.id}`).slice(0, 140),
       }, idempotencyKey);
       // Never report a reference the rail did not return.
       if (!wire.id) throw new Error("Column wire response has no id");

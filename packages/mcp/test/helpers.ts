@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createEngine, humanApprovalChallenger, type PaymentInput, type Principal, type SentinelPay, type Vendor } from "@sentinelpay/engine";
-import { fixtureProbe } from "@sentinelpay/engine/adapters/fixtures";
-import { memoryStorage, memoryVendors } from "@sentinelpay/engine/adapters/memory";
-import { createHandler } from "@sentinelpay/engine/http";
+import { createEngine, humanApprovalChallenger, type PaymentInput, type Principal, type PayFirewall, type Vendor } from "payfirewall";
+import { fixtureProbe } from "payfirewall/adapters/fixtures";
+import { memoryStorage, memoryVendors } from "payfirewall/adapters/memory";
+import { createHandler } from "payfirewall/http";
 import { createMcpServer, type McpServerOptions } from "../src/server";
 
 export const AGENT: Principal = { id: "agent:ap-bot", kind: "agent", roles: ["requester"] };
@@ -47,7 +47,7 @@ export async function connectedScenario(serverOpts: McpServerOptions = { princip
     vendors: memoryVendors([MERIDIAN]),
     probes: [fixtureProbe("rdap", fixture("rdap")), fixtureProbe("tavily", fixture("tavily"))],
     challengers: [humanApprovalChallenger({
-      approvalBaseUrl: "https://sentinelpay.test/approve",
+      approvalBaseUrl: "https://payfirewall.test/approve",
       deliver: async (m) => {
         const url = new URL(m.url);
         links.push({ url: m.url, summary: m.summary, challengeId: decodeURIComponent(url.pathname.split("/").pop()!), token: url.hash.replace(/^#t=/, "") });
@@ -62,7 +62,7 @@ export async function connectedScenario(serverOpts: McpServerOptions = { princip
   return { engine, storage, links, handler, client, close };
 }
 
-export async function connect(api: SentinelPay, serverOpts: McpServerOptions = {}) {
+export async function connect(api: PayFirewall, serverOpts: McpServerOptions = {}) {
   const server = createMcpServer(api, serverOpts);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "headless-agent", version: "0.0.0" });
@@ -82,7 +82,7 @@ export async function postResult(
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (auth.token) headers.authorization = `Bearer ${link.token}`;
   if (auth.session) headers.cookie = "session=approver";
-  const res = await handler(new Request(`https://sentinelpay.test/api/v1/challenges/${encodeURIComponent(link.challengeId)}/result`, {
+  const res = await handler(new Request(`https://payfirewall.test/api/v1/challenges/${encodeURIComponent(link.challengeId)}/result`, {
     method: "POST", headers, body: JSON.stringify(body),
   }));
   return { status: res.status, json: await res.json() };

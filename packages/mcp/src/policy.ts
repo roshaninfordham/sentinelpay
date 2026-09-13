@@ -1,6 +1,6 @@
-import { assessRisk, levelFor } from "@sentinelpay/engine";
+import { assessRisk, levelFor } from "payfirewall";
 
-// The sentinelpay://policy resource: enough of rules-v1 for a model to explain a score.
+// The payfirewall://policy resource: enough of rules-v1 for a model to explain a score.
 // Weights are restated here because the engine index does not export them; test/policy.test.ts checks
 // every weight and threshold against assessRisk and levelFor, so a policy change fails the build.
 

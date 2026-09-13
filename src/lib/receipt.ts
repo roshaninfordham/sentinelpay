@@ -1,4 +1,4 @@
-import type { CaseRecord, ChallengeEvidence, Verification } from "@sentinelpay/engine";
+import type { CaseRecord, ChallengeEvidence, Verification } from "payfirewall";
 import { APP_OPERATOR, getRuntime } from "./engine";
 import { readLedger, verifyChain } from "./ledger";
 import { paymentSource, vendorDirectory } from "./providers";

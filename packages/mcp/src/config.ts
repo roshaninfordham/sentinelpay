@@ -1,4 +1,4 @@
-// Command-line parsing for the sentinelpay-mcp bin. Pure: the bin passes argv and env in, so this module
+// Command-line parsing for the payfirewall-mcp bin. Pure: the bin passes argv and env in, so this module
 // never reads process state and can be tested without spawning anything.
 
 export type LaunchMode =
@@ -14,12 +14,12 @@ export class UsageError extends Error {
 }
 
 export const USAGE = `Usage:
-  sentinelpay-mcp                      remote mode: set SENTINELPAY_URL and SENTINELPAY_API_KEY
-  sentinelpay-mcp --config <module>    embedded mode: the module's default export is an EngineConfig
+  payfirewall-mcp                      remote mode: set PAYFIREWALL_URL and PAYFIREWALL_API_KEY
+  payfirewall-mcp --config <module>    embedded mode: the module's default export is an EngineConfig
 
 Remote mode is recommended: challengers, rails, storage and secrets stay with the host.`;
 
-/** Reads only SENTINELPAY_URL and SENTINELPAY_API_KEY. */
+/** Reads only PAYFIREWALL_URL and PAYFIREWALL_API_KEY. */
 export type LaunchEnv = Readonly<Record<string, string | undefined>>;
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -30,10 +30,10 @@ function remoteUrl(raw: string): string {
   try {
     url = new URL(raw);
   } catch {
-    throw new UsageError(`SENTINELPAY_URL is not a valid URL: ${raw}`);
+    throw new UsageError(`PAYFIREWALL_URL is not a valid URL: ${raw}`);
   }
   if (url.protocol !== "https:" && !(url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname))) {
-    throw new UsageError("SENTINELPAY_URL must use https (http is allowed only for localhost)");
+    throw new UsageError("PAYFIREWALL_URL must use https (http is allowed only for localhost)");
   }
   return raw;
 }
@@ -55,15 +55,15 @@ export function resolveLaunch(argv: readonly string[], env: LaunchEnv): LaunchMo
     }
   }
 
-  const url = env.SENTINELPAY_URL?.trim();
-  const apiKey = env.SENTINELPAY_API_KEY?.trim();
+  const url = env.PAYFIREWALL_URL?.trim();
+  const apiKey = env.PAYFIREWALL_API_KEY?.trim();
 
   // Both modes at once is ambiguous about where decisions are made, so neither is guessed.
   if (configPath && (url || apiKey)) {
-    throw new UsageError("use either --config (embedded) or SENTINELPAY_URL/SENTINELPAY_API_KEY (remote), not both");
+    throw new UsageError("use either --config (embedded) or PAYFIREWALL_URL/PAYFIREWALL_API_KEY (remote), not both");
   }
   if (configPath) return { mode: "embedded", configPath };
   if (url && apiKey) return { mode: "remote", url: remoteUrl(url), apiKey };
-  if (url || apiKey) throw new UsageError("remote mode needs both SENTINELPAY_URL and SENTINELPAY_API_KEY");
-  throw new UsageError("no configuration: set SENTINELPAY_URL and SENTINELPAY_API_KEY, or pass --config <module>");
+  if (url || apiKey) throw new UsageError("remote mode needs both PAYFIREWALL_URL and PAYFIREWALL_API_KEY");
+  throw new UsageError("no configuration: set PAYFIREWALL_URL and PAYFIREWALL_API_KEY, or pass --config <module>");
 }

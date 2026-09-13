@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { NextAction, PaymentInput, Receipt, Verification } from "@sentinelpay/engine";
+import type { NextAction, PaymentInput, Receipt, Verification } from "payfirewall";
 import { connectedScenario, poisoned, postResult } from "./helpers";
 
 // §7.3: a headless agent that knows nothing about the engine. It calls verify_payment once and then does
@@ -120,13 +120,13 @@ test("deny path: WAIT then POLL, approver denies on the result route, agent stop
   assert.ok(run.transcript.some((line) => line.includes("reason=AWAITING_OUT_OF_BAND_CONFIRMATION")), run.transcript.join("\n"));
 
   assert.equal(final.proof.ledgerLength, 6);
-  const read = await s.client.readResource({ uri: "sentinelpay://verifications/pay_240k/receipt" });
+  const read = await s.client.readResource({ uri: "payfirewall://verifications/pay_240k/receipt" });
   const receipt = JSON.parse((read.contents[0] as { text: string }).text) as Receipt;
   assert.deepEqual(receipt.entries.map((e) => e.event), [
     "INTERCEPTED", "INVESTIGATION_STARTED", "FORENSICS", "CHALLENGE_STARTED", "CALL_RESULT", "FROZEN",
   ]);
   assert.deepEqual([receipt.chain.ok, receipt.chain.length, receipt.headHash], [true, 6, final.proof.ledgerHeadHash]);
-  const verificationRead = await s.client.readResource({ uri: "sentinelpay://verifications/pay_240k" });
+  const verificationRead = await s.client.readResource({ uri: "payfirewall://verifications/pay_240k" });
   for (const surface of [read, verificationRead, run.transcript, run.final.structured]) {
     assert.ok(!JSON.stringify(surface).includes(s.links[0].token), "the responder token leaked through MCP");
   }

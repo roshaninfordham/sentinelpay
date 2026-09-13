@@ -553,7 +553,7 @@ function buildEngine(settings: Settings, bound?: Principal): Engine {
 
     let released;
     try {
-      released = await rail.release(c.payment, { idempotencyKey: `sentinelpay-${paymentId}` });
+      released = await rail.release(c.payment, { idempotencyKey: `${settings.railIdempotencyPrefix}-${paymentId}` });
     } catch (err) {
       return fail("RAIL_RELEASE_FAILED", { error: errorMessage(err) }, errorMessage(err));
     }

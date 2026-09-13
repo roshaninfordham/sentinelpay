@@ -74,7 +74,7 @@ test("authorize with the token: CLEARED is committed before rail.release (spy ra
   const [release] = rail.releases;
   assert.ok(release.ledgerAtRelease.includes("CLEARED"), "CLEARED must already be committed when release runs");
   assert.ok(!release.ledgerAtRelease.includes("RAIL_RELEASED"));
-  assert.equal(release.idempotencyKey, "sentinelpay-pay_240k");
+  assert.equal(release.idempotencyKey, "payfirewall-pay_240k");
 
   assert.equal(v.state, "CLEARED");
   assert.equal(v.decision, "PAY");
@@ -102,7 +102,7 @@ test("rail release failure keeps PAY with RETRY; re-verify retries only the rele
 
   const v2 = await s.engine.verify(clean());
   assert.deepEqual(v2.rail, { status: "RELEASED", reference: "wire_2" });
-  assert.deepEqual(rail.releases.map((r) => r.idempotencyKey), ["sentinelpay-pay_18k", "sentinelpay-pay_18k"]);
+  assert.deepEqual(rail.releases.map((r) => r.idempotencyKey), ["payfirewall-pay_18k", "payfirewall-pay_18k"]);
   assert.deepEqual(await eventsOf(storage), ["CLEARED", "RAIL_ERROR", "RAIL_RELEASED"]);
 });
 

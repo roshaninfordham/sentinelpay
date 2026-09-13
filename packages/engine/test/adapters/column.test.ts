@@ -41,16 +41,16 @@ test("readBeneficiary reads last4 from the mapped counterparty; the payment's ow
   await assert.rejects(r.readBeneficiary!(clean({ id: "pay_18k" })), /404/);
 });
 
-test("release: Basic ':key' auth, form-encoded wire, Idempotency-Key sentinelpay-{paymentId}", async () => {
+test("release: Basic ':key' auth, form-encoded wire, Idempotency-Key payfirewall-{paymentId}", async () => {
   const { fetch, calls } = columnStub({});
-  const released = await rail(fetch).release(clean({ memo: "Invoice 118" }), { idempotencyKey: "sentinelpay-pay_18k" });
+  const released = await rail(fetch).release(clean({ memo: "Invoice 118" }), { idempotencyKey: "payfirewall-pay_18k" });
   assert.deepEqual(released, { reference: "wire_123", status: "initiated" });
   const [wire] = wires(calls);
   assert.equal(wire.method, "POST");
   assert.equal(wire.url, "https://api.column.com/transfers/wire");
   assert.equal(wire.headers.Authorization, `Basic ${Buffer.from(`:${KEY}`).toString("base64")}`);
   assert.equal(wire.headers["Content-Type"], "application/x-www-form-urlencoded");
-  assert.equal(wire.headers["Idempotency-Key"], "sentinelpay-pay_18k");
+  assert.equal(wire.headers["Idempotency-Key"], "payfirewall-pay_18k");
   assert.deepEqual(Object.fromEntries(new URLSearchParams(wire.body)), {
     currency_code: "USD", bank_account_id: "bacc_ap", counterparty_id: "cpty_northwind", amount: "1800000", description: "Invoice 118",
   });
@@ -58,9 +58,9 @@ test("release: Basic ':key' auth, form-encoded wire, Idempotency-Key sentinelpay
 
 test("release never invents a reference: a response without an id or a non-2xx rejects", async () => {
   const noId = stubFetch(() => Response.json({ status: "initiated" }));
-  await assert.rejects(rail(noId.fetch).release(clean(), { idempotencyKey: "sentinelpay-pay_18k" }), /no id/);
+  await assert.rejects(rail(noId.fetch).release(clean(), { idempotencyKey: "payfirewall-pay_18k" }), /no id/);
   const failed = stubFetch(() => Response.json({ message: "insufficient funds" }, { status: 400 }));
-  await assert.rejects(rail(failed.fetch).release(clean(), { idempotencyKey: "sentinelpay-pay_18k" }), /400 insufficient funds/);
+  await assert.rejects(rail(failed.fetch).release(clean(), { idempotencyKey: "payfirewall-pay_18k" }), /400 insufficient funds/);
 });
 
 test("engine + columnRail: clean payment reads the rail beneficiary and creates one sandbox wire", async () => {
@@ -73,7 +73,7 @@ test("engine + columnRail: clean payment reads the rail beneficiary and creates 
   assert.equal(settled.decision, "PAY");
   assert.deepEqual(settled.rail, { status: "RELEASED", reference: "wire_123" });
   assert.equal(wires(calls).length, 1);
-  assert.equal(wires(calls)[0].headers["Idempotency-Key"], "sentinelpay-pay_18k");
+  assert.equal(wires(calls)[0].headers["Idempotency-Key"], "payfirewall-pay_18k");
   assert.deepEqual(await eventsOf(storage, "pay_18k"), ["CLEARED", "RAIL_RELEASED"]);
 });
 

@@ -1,4 +1,4 @@
-import { mintConversationToken } from "@sentinelpay/engine/adapters/elevenlabs";
+import { mintConversationToken } from "payfirewall/adapters/elevenlabs";
 import { getRuntime } from "@/lib/engine";
 import { legacyError } from "@/lib/legacy-response";
 import { callbackPhoneOf } from "@/lib/timeline-format";

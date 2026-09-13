@@ -4,7 +4,7 @@ import type { ForensicSignal, Probe } from "../core/types";
 // Deterministic, free, no key. Emits one domain_age_days signal (null = the registry has no record).
 
 export const RDAP_BASE = "https://rdap.org/domain/";
-export const DEFAULT_RDAP_USER_AGENT = "SentinelPay/0.1 (+https://github.com/sentinelpay)";
+export const DEFAULT_RDAP_USER_AGENT = "payfirewall/0.1 (+https://www.npmjs.com/package/payfirewall)";
 
 export interface RdapEvent { eventAction: string; eventDate: string }
 

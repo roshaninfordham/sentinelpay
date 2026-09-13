@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,9 +23,45 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      "@sentinelpay/engine": ["./packages/engine/src/index.ts"],
-      "@sentinelpay/engine/*": ["./packages/engine/src/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "payfirewall": [
+        "./packages/engine/src/index.ts"
+      ],
+      "payfirewall/tools": [
+        "./packages/engine/src/tools/index.ts"
+      ],
+      "payfirewall/http": [
+        "./packages/engine/src/http/index.ts"
+      ],
+      "payfirewall/client": [
+        "./packages/engine/src/http/client.ts"
+      ],
+      "payfirewall/testing": [
+        "./packages/engine/src/testing/index.ts"
+      ],
+      "payfirewall/adapters/memory": [
+        "./packages/engine/src/adapters/memory.ts"
+      ],
+      "payfirewall/adapters/libsql": [
+        "./packages/engine/src/adapters/libsql.ts"
+      ],
+      "payfirewall/adapters/rdap": [
+        "./packages/engine/src/adapters/rdap.ts"
+      ],
+      "payfirewall/adapters/tavily": [
+        "./packages/engine/src/adapters/tavily.ts"
+      ],
+      "payfirewall/adapters/fixtures": [
+        "./packages/engine/src/adapters/fixtures.ts"
+      ],
+      "payfirewall/adapters/column": [
+        "./packages/engine/src/adapters/column.ts"
+      ],
+      "payfirewall/adapters/elevenlabs": [
+        "./packages/engine/src/adapters/elevenlabs.ts"
+      ]
     }
   },
   "include": [
@@ -32,5 +72,7 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }

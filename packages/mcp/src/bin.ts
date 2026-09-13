@@ -2,15 +2,15 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createEngine, type EngineConfig, type SentinelPay } from "@sentinelpay/engine";
-import { createHttpClient } from "@sentinelpay/engine/client";
+import { createEngine, type EngineConfig, type PayFirewall } from "payfirewall";
+import { createHttpClient } from "payfirewall/client";
 import { resolveLaunch, USAGE, UsageError, type LaunchMode } from "./config";
 import { createMcpServer, DEFAULT_SWEEP_INTERVAL_MS, type McpServerOptions } from "./server";
 
-// The only place in @sentinelpay/mcp that reads the environment. stdout carries the MCP protocol,
+// The only place in payfirewall-mcp that reads the environment. stdout carries the MCP protocol,
 // so every diagnostic goes to stderr.
 
-const log = (message: string) => process.stderr.write(`sentinelpay-mcp: ${message}\n`);
+const log = (message: string) => process.stderr.write(`payfirewall-mcp: ${message}\n`);
 
 async function loadEngineConfig(configPath: string): Promise<EngineConfig> {
   const mod = (await import(pathToFileURL(resolve(configPath)).href)) as { default?: unknown };
@@ -21,7 +21,7 @@ async function loadEngineConfig(configPath: string): Promise<EngineConfig> {
   return config as EngineConfig;
 }
 
-async function build(launch: Exclude<LaunchMode, { mode: "help" }>): Promise<{ api: SentinelPay; opts: McpServerOptions }> {
+async function build(launch: Exclude<LaunchMode, { mode: "help" }>): Promise<{ api: PayFirewall; opts: McpServerOptions }> {
   if (launch.mode === "remote") {
     return { api: createHttpClient({ baseUrl: launch.url, apiKey: launch.apiKey }), opts: {} };
   }

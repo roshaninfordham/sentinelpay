@@ -29,7 +29,7 @@ export function openApiDocument(opts: { basePath?: string; serverUrl?: string } 
   return {
     openapi: "3.1.0",
     info: {
-      title: "SentinelPay API",
+      title: "PayFirewall API",
       version: "v1",
       description:
         "Fail-closed verification for vendor bank-change payments. Pay only when decision is PAY; do nextActions[0]. " +

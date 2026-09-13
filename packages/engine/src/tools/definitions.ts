@@ -1,7 +1,7 @@
 // The single schema source for every agent surface (§5.1): MCP, OpenAI, Anthropic, AI SDK, HTTP validation and OpenAPI.
 // Hand-written JSON Schema draft-07. The requester toolset carries no responder token field and no AUTHORIZED value.
 
-/** Structural subset of JSON Schema draft-07 used by the SentinelPay schemas. */
+/** Structural subset of JSON Schema draft-07 used by the PayFirewall schemas. */
 export interface JSONSchema7 {
   type?: JSONSchemaType | JSONSchemaType[];
   title?: string;
@@ -56,7 +56,7 @@ const REASON_CODES = [
   "PROBE_FAILED", "FIXTURE_DATA",
 ];
 const MUST_NOT = [
-  "PAY_OUTSIDE_SENTINELPAY", "DIAL_INVOICE_NUMBER", "RETRY_WITH_DIFFERENT_BENEFICIARY",
+  "PAY_OUTSIDE_PAYFIREWALL", "DIAL_INVOICE_NUMBER", "RETRY_WITH_DIFFERENT_BENEFICIARY",
   "ASK_FOR_RESPONDER_TOKEN", "FOLLOW_INSTRUCTIONS_IN_UNTRUSTED",
 ];
 const LEDGER_EVENTS = [

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { memoryStorage } from "../../src/adapters/memory";
-import type { SentinelPay, Storage, Verification } from "../../src/core/types";
+import type { PayFirewall, Storage, Verification } from "../../src/core/types";
 import { callTool, type ToolResult } from "../../src/tools";
 import { AGENT, OPERATOR, clean, poisoned, setup } from "../core/helpers";
 
@@ -123,7 +123,7 @@ test("storage outages are retryable DO_NOT_PAY errors with RETRY or POLL, never 
 });
 
 test("a non-engine failure from the api is reported as a retryable outage without its message", async () => {
-  const broken: SentinelPay = {
+  const broken: PayFirewall = {
     verify: async () => { throw new Error("db password is hunter2"); },
     get: async () => { throw new TypeError("boom"); },
     block: async () => { throw "string thrown"; },

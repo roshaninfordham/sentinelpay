@@ -2,13 +2,13 @@ import type { Client, Transaction } from "@libsql/client";
 import {
   ConfigError, createEngine, humanApprovalChallenger,
   type CaseRecord, type Challenger, type Engine, type EngineEvent, type Environment, type Principal, type Probe, type Rail, type RiskAssessment,
-} from "@sentinelpay/engine";
-import { columnRail } from "@sentinelpay/engine/adapters/column";
-import { fixtureProbe, withFallback } from "@sentinelpay/engine/adapters/fixtures";
-import { libsqlStorage, libsqlVendors } from "@sentinelpay/engine/adapters/libsql";
-import { rdapProbe } from "@sentinelpay/engine/adapters/rdap";
-import { tavilyProbe } from "@sentinelpay/engine/adapters/tavily";
-import type { HealthInfo } from "@sentinelpay/engine/http";
+} from "payfirewall";
+import { columnRail } from "payfirewall/adapters/column";
+import { fixtureProbe, withFallback } from "payfirewall/adapters/fixtures";
+import { libsqlStorage, libsqlVendors } from "payfirewall/adapters/libsql";
+import { rdapProbe } from "payfirewall/adapters/rdap";
+import { tavilyProbe } from "payfirewall/adapters/tavily";
+import type { HealthInfo } from "payfirewall/http";
 import rdapFixtures from "../../fixtures/rdap.json";
 import tavilyFixtures from "../../fixtures/tavily.json";
 import { getDb } from "./db";
@@ -291,6 +291,8 @@ async function build(): Promise<AppRuntime> {
     rail,
     secrets: { tokenPepper: settings.tokenPepper },
     payer: { name: settings.payerName },
+    // Existing Column sandbox wires were keyed "sentinelpay-{paymentId}"; keep retries idempotent.
+    railIdempotencyPrefix: "sentinelpay",
     principal: APP_REQUESTER,
     // Live Tavily "advanced" searches can take longer than the 8 s default.
     ...(settings.demoMode === "live" ? { probeTimeoutMs: 15_000 } : {}),

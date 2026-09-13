@@ -1,4 +1,4 @@
-import { EngineError, type ChallengeEvidence } from "@sentinelpay/engine";
+import { EngineError, type ChallengeEvidence } from "payfirewall";
 import { APP_OPERATOR, getRuntime } from "./engine";
 import { buildReceipt, type IncidentReceipt } from "./receipt";
 import type { CallOutcome, Verdict } from "./types";

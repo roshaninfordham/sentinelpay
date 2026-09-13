@@ -1,4 +1,4 @@
-import type { CaseRecord, EngineEvent, ForensicSignal, Mismatch } from "@sentinelpay/engine";
+import type { CaseRecord, EngineEvent, ForensicSignal, Mismatch } from "payfirewall";
 import type { TimelineKind } from "./types";
 
 // EngineEvent -> investigation-terminal lines. Pure: the app's onEvent sink supplies the case context and does the

@@ -1,4 +1,4 @@
-import { EngineError, type ChallengeAnswers, type ChallengeEvidence, type Engine, type Principal, type SentinelPay, type Verdict, type Verification } from "../core/types";
+import { EngineError, type ChallengeAnswers, type ChallengeEvidence, type Engine, type Principal, type PayFirewall, type Verdict, type Verification } from "../core/types";
 import { invalidInput, parseArgs, toToolError } from "../tools/call";
 import { toolDefinitions, type JSONSchema7 } from "../tools/definitions";
 import { validateSchema } from "../tools/validate";
@@ -39,7 +39,7 @@ const UNKNOWN_HEALTH: HealthInfo = { environment: "unknown", storage: "unknown",
 
 class Unauthorized extends Error {}
 
-const isEngine = (api: SentinelPay): api is Engine =>
+const isEngine = (api: PayFirewall): api is Engine =>
   typeof (api as Partial<Engine>).resolveChallenge === "function" && typeof (api as Partial<Engine>).verifyLedger === "function";
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -58,7 +58,7 @@ function errorResponse(err: unknown): Response {
         retryable: false,
         nextActions: [{ type: "DO_NOT_PAY", reason: "UNDER_INVESTIGATION", terminal: false }],
       },
-    }, { "www-authenticate": 'Bearer realm="sentinelpay"' });
+    }, { "www-authenticate": 'Bearer realm="payfirewall"' });
   }
   const error = toToolError(err);
   return json(new EngineError(error.code, error.message).httpStatus, { error });
@@ -125,7 +125,7 @@ function ifNoneMatch(req: Request): { any: boolean; versions: number[] } {
   return { any: parts.includes("*"), versions };
 }
 
-export function createHandler(api: Engine | SentinelPay, opts: HandlerOptions): (req: Request) => Promise<Response> {
+export function createHandler(api: Engine | PayFirewall, opts: HandlerOptions): (req: Request) => Promise<Response> {
   const basePath = (opts.basePath ?? DEFAULT_BASE_PATH).replace(/\/+$/, "");
 
   async function principalOf(req: Request): Promise<Principal> {
@@ -142,7 +142,7 @@ export function createHandler(api: Engine | SentinelPay, opts: HandlerOptions): 
 
   async function postVerification(req: Request): Promise<Response> {
     const principal = await principalOf(req);
-    const body = parseArgs<{ payment: Parameters<SentinelPay["verify"]>[0]; waitMs?: number }>(verifyBodySchema, await readJson(req), { nullAsAbsent: false });
+    const body = parseArgs<{ payment: Parameters<PayFirewall["verify"]>[0]; waitMs?: number }>(verifyBodySchema, await readJson(req), { nullAsAbsent: false });
     const headerKey = req.headers.get("idempotency-key") ?? undefined;
     if (headerKey !== undefined) checkParam(idempotencyKeySchema, headerKey, "/idempotencyKey");
 

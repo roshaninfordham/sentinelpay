@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "SentinelPay API",
+    "title": "PayFirewall API",
     "version": "v1",
     "description": "Fail-closed verification for vendor bank-change payments. Pay only when decision is PAY; do nextActions[0]. Additive changes only within v1."
   },
@@ -1219,7 +1219,7 @@
             "items": {
               "type": "string",
               "enum": [
-                "PAY_OUTSIDE_SENTINELPAY",
+                "PAY_OUTSIDE_PAYFIREWALL",
                 "DIAL_INVOICE_NUMBER",
                 "RETRY_WITH_DIFFERENT_BENEFICIARY",
                 "ASK_FOR_RESPONDER_TOKEN",
@@ -1973,7 +1973,7 @@
                 "items": {
                   "type": "string",
                   "enum": [
-                    "PAY_OUTSIDE_SENTINELPAY",
+                    "PAY_OUTSIDE_PAYFIREWALL",
                     "DIAL_INVOICE_NUMBER",
                     "RETRY_WITH_DIFFERENT_BENEFICIARY",
                     "ASK_FOR_RESPONDER_TOKEN",
@@ -2843,7 +2843,7 @@
                 "items": {
                   "type": "string",
                   "enum": [
-                    "PAY_OUTSIDE_SENTINELPAY",
+                    "PAY_OUTSIDE_PAYFIREWALL",
                     "DIAL_INVOICE_NUMBER",
                     "RETRY_WITH_DIFFERENT_BENEFICIARY",
                     "ASK_FOR_RESPONDER_TOKEN",
@@ -3597,7 +3597,7 @@
                     "items": {
                       "type": "string",
                       "enum": [
-                        "PAY_OUTSIDE_SENTINELPAY",
+                        "PAY_OUTSIDE_PAYFIREWALL",
                         "DIAL_INVOICE_NUMBER",
                         "RETRY_WITH_DIFFERENT_BENEFICIARY",
                         "ASK_FOR_RESPONDER_TOKEN",
