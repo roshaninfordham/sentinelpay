@@ -32,6 +32,7 @@ export interface AgentSettings {
   turn_timeout: number;
   silence_end_call_timeout: number;
   spelling_patience: "auto" | "off";
+  turn_eagerness: "patient" | "normal" | "eager";
   max_duration_seconds: number;
   max_conversation_duration_message: string;
   tool_response_timeout_secs: number;
@@ -86,7 +87,7 @@ export function agentBody(cfg: ReturnType<typeof loadAgentConfig>, toolIds: stri
   return {
     name: "SentinelPay settlement desk",
     conversation_config: {
-      turn: { turn_timeout: s.turn_timeout, silence_end_call_timeout: s.silence_end_call_timeout, spelling_patience: s.spelling_patience },
+      turn: { turn_timeout: s.turn_timeout, silence_end_call_timeout: s.silence_end_call_timeout, spelling_patience: s.spelling_patience, turn_eagerness: s.turn_eagerness },
       conversation: { max_duration_seconds: s.max_duration_seconds },
       agent: {
         first_message: cfg.firstMessage,
@@ -132,6 +133,7 @@ export function drift(live: LiveAgent, cfg: ReturnType<typeof loadAgentConfig>):
   eq("max_tokens", a.prompt.max_tokens, s.max_tokens);
   eq("turn_timeout", live.conversation_config.turn?.turn_timeout, s.turn_timeout);
   eq("silence_end_call_timeout", live.conversation_config.turn?.silence_end_call_timeout, s.silence_end_call_timeout);
+  eq("turn_eagerness", live.conversation_config.turn?.turn_eagerness, s.turn_eagerness);
   eq("max_duration_seconds", live.conversation_config.conversation?.max_duration_seconds, s.max_duration_seconds);
   eq("end_call enabled", Boolean(a.prompt.built_in_tools?.end_call), s.end_call);
   eq("auth.enable_auth", live.platform_settings.auth?.enable_auth, true);
